@@ -1,6 +1,6 @@
 {
   "name": "session-link",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Links a team's Claude Code sessions through that team's own session-link server: Claude reads and posts team status through the bundled connector, and gets a warning before editing a file a teammate is changing.",
   "author": {
     "name": "Ethan Luh"
@@ -22,6 +22,20 @@
       "type": "boolean",
       "title": "Share presence",
       "description": "Let Claude share which branch and files you're editing in team repos, without asking each time. No summaries or file contents. Off by default.",
+      "default": false,
+      "required": false
+    },
+    "auto_post_updates": {
+      "type": "boolean",
+      "title": "Auto-post status updates",
+      "description": "After each new commit in a team repo, let Claude post a one-sentence status update without asking \"Share status with team?\" (at most every 10 minutes; each replaces your session's previous one). It tells you what it posted. Other milestones, handoffs and knowledge notes still ask. Off by default.",
+      "default": false,
+      "required": false
+    },
+    "auto_self_notes": {
+      "type": "boolean",
+      "title": "Automatic notes to self",
+      "description": "Let Claude save where you left off when you pause or stop mid-task, and load that note at your next session, without asking. These notes are visible only to you and expire after 14 days. Off by default.",
       "default": false,
       "required": false
     }

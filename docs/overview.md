@@ -33,7 +33,7 @@ Claude reads and writes it through a connector (an MCP server). People read it i
 
 | Choice | Why |
 |---|---|
-| **Nothing is shared without your yes** | What's shared is what you meant to share, with the why, not a stream of automatic logs that can leak secrets or read as surveillance. The one exception is presence, which you turn on once and which carries no prose. |
+| **Nothing is shared without your yes** | What's shared is what you meant to share, with the why, not a stream of automatic logs that can leak secrets or read as surveillance. The exceptions are presence and auto-posting, which you turn on once; presence carries no prose, and Claude tells you each auto-post. |
 | **Curated notes, not transcripts** | Transcripts carry secrets, customer data and noise. Nobody can meaningfully approve sharing 200 KB of chat. |
 | **Claude reads and writes through one connector** | One data path and one sign-in, with no tokens on disk. |
 | **Hooks only prompt; they never send** | The hooks work out local facts (repo, branch, changed files) and hand them to Claude. They make no network calls. |

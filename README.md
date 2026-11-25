@@ -14,9 +14,9 @@ session-link links a small team's Claude Code sessions through one shared ledger
 
 **Reading.** At session start, a hook tells Claude to call `read_feed` for the current repo. Claude then mentions any teammate working on the same files. `read_feed` returns recent updates plus a map of which paths each teammate is changing. A hook caches that map, and before Claude edits a file on it, another hook adds a one-time warning.
 
-**Writing, only with your yes.** Nothing is shared unless you agree. After a major milestone (a commit or PR, a decision, a blocker, finishing a task, starting work others might collide with), Claude asks in one line, "Share status with team?", with a one-sentence draft, and calls `post_update` only if you say yes. The Stop hook spots new commits and hands Claude the repo, branch and paths for the draft; Claude spots the other milestones itself. It won't ask twice about the same commit, and asks at most every 10 minutes (`SESSION_LINK_ASK_MIN`; `0` turns the commit ask off).
+**Writing, only with your yes.** Nothing is shared unless you agree, either each time or once in settings. After a major milestone (a commit or PR, a decision, a blocker, finishing a task, starting work others might collide with), Claude asks in one line, "Share status with team?", with a one-sentence draft, and calls `post_update` only if you say yes. The Stop hook spots new commits and hands Claude the repo, branch and paths for the draft; Claude spots the other milestones itself. It won't ask twice about the same commit, and asks at most every 10 minutes (`SESSION_LINK_ASK_MIN`; `0` turns the commit ask off, and auto-posting with it). If you'd rather not be asked about commits, turn on the `auto_post_updates` plugin setting (off by default): Claude then posts the commit update without asking, on the same schedule, and tells you in one line what it posted. You review it after it's posted, not before, and can remove it with `delete_my_update`. Other milestones, handoffs and knowledge notes still ask.
 
-**Presence, if you turn it on.** With the `share_presence` plugin setting on (it's off by default), Claude shares which branch and files you're editing in team repos, without asking each time and without any summary. That is the only thing shared without a per-post yes, and you opt in once. Teammates' edit warnings then cover work you haven't committed or announced yet. The row expires about 4 hours after your last edit.
+**Presence, if you turn it on.** With the `share_presence` plugin setting on (it's off by default), Claude shares which branch and files you're editing in team repos, without asking each time and without any summary. Like **Auto-post status updates**, it shares without a per-post yes only because you opted in once. Teammates' edit warnings then cover work you haven't committed or announced yet. The row expires about 4 hours after your last edit.
 
 **Knowledge where it applies.** If a team knowledge note lists the file Claude is about to edit, a hook points Claude at it once: read it with `get_note` before changing how that part works.
 
@@ -31,8 +31,9 @@ session-link links a small team's Claude Code sessions through one shared ledger
 - **Share early for overlap.** Overlap warnings only know about paths someone has shared. If you're starting on a shared area, say "share that I'm starting on the auth refactor" before the first commit, and teammates' sessions will warn before touching those files.
 - **Fix mistakes right away.** "Delete my last session-link update" (Claude calls `delete_my_update`). A newer update from the same session replaces the older one automatically.
 - **Hand off, don't just leave.** Before switching away from unfinished work someone else will pick up, say "hand this off to <name>".
-- **Leave yourself a note.** When you stop mid-task, Claude offers "Save where you left off?". Your next session in that repo offers to load it. Notes to yourself are private and last 14 days.
+- **Leave yourself a note.** When you stop mid-task, Claude offers "Save where you left off?". Your next session in that repo offers to load it. With **Automatic notes to self** on, Claude saves and loads the note without asking. Notes to yourself are private and last 14 days.
 - **Turn on presence if you'd rather not think about sharing.** `/plugin` → session-link → settings → **Share presence**. It shares repo, branch and file paths only.
+- **Skip the per-post prompts.** In the same settings, **Auto-post status updates** posts your commit updates without asking, and **Automatic notes to self** saves where you left off and loads it at your next session without asking.
 - **Save the why when something lands.** When Claude offers "Save how this works for the team?" after a merge, say yes for anything someone might build on later.
 - **Glance without Claude.** `https://<your instance>/feed` shows who's active and the last 48 hours.
 
@@ -201,7 +202,7 @@ npm run setup -- --name acme-link --host session-link.acme.com --allowlist "gith
 }
 ```
 
-Members need read access to the marketplace repo; making it public removes that step. Leave `share_presence` out of the managed options so each person chooses it.
+Members need read access to the marketplace repo; making it public removes that step. Leave `share_presence`, `auto_post_updates` and `auto_self_notes` out of the managed options so each person chooses them.
 
 **3. Add people** at `https://<your instance>/admin`.
 
