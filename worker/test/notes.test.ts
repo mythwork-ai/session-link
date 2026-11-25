@@ -381,4 +381,22 @@ describe("pages", () => {
     expect(tool.posts.items.every((r: { kind: string }) => r.kind !== "heartbeat")).toBe(true);
     expect(tool.posts.more).toBe(true);
   });
+
+  it("/feed and /me fold a post's details under its summary, escaped; posts without details get no fold", async () => {
+    await author("sam", "Sam");
+    await author("alex", "Alex");
+    const sam = await client("sam");
+    await sam("post_update", { kind: "progress", summary: "acme/app auth: cookie migration", details: "## Scope\n- acme/app only; billing unaffected\n<script>alert(1)</script>", repo_url: REPO });
+    await (await client("alex"))("post_update", { kind: "status", summary: "acme/app docs: no details here", repo_url: REPO });
+    for (const [path, who] of [["/feed", "alex"], ["/me", "sam"]] as const) {
+      const body = (await page(path, who)).body;
+      expect(body).toContain('<details class="fold">');
+      expect(body).toContain("<h2>Scope</h2>");
+      expect(body).toContain("<li>acme/app only; billing unaffected</li>");
+      expect(body).not.toContain("<script>alert");
+    }
+    const feed = (await page("/feed", "sam")).body;
+    // Sam's post appears twice (his card and the timeline); Alex's has no details, so exactly two folds.
+    expect(feed.match(/<details class="fold">/g)).toHaveLength(2);
+  });
 });

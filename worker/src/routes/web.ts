@@ -7,7 +7,7 @@ import { feedRows } from "../mcp/server";
 import { POSTS_MAX, acceptHandoff, getNote, handoffsFor, myNotes, recentKnowledge, searchKnowledge, type NoteMeta, type NoteRow } from "../notes";
 import { isAllowed, loadAllowlist } from "../safety/allowlist";
 import { escapeHtml, readSession, sessionCookie } from "../web/session";
-import { ICON_GITHUB, initial, render, renderNoteBody, statePage, type Viewer } from "../web/ui";
+import { ICON_GITHUB, detailsFold, initial, render, renderNoteBody, statePage, type Viewer } from "../web/ui";
 import { adminPage } from "./admin-page";
 
 const STATE_COOKIE = "__Host-sl-state";
@@ -43,6 +43,7 @@ interface Latest {
   display_name: string;
   kind: string | null;
   summary: string | null;
+  details: string | null;
   paths: string | null;
   repo: string | null;
   branch: string | null;
@@ -84,7 +85,7 @@ ${handoffs
 
   // Team now: each person's latest update from the last 48 hours.
   const { results: team } = await env.LEDGER_DB.prepare(
-    `SELECT a.id, a.display_name, u.kind, u.summary, u.paths, u.repo, u.branch, u.updated_at
+    `SELECT a.id, a.display_name, u.kind, u.summary, u.details, u.paths, u.repo, u.branch, u.updated_at
      FROM authors a LEFT JOIN updates u ON u.id = (
        SELECT u2.id FROM updates u2 WHERE u2.author_id = a.id AND u2.updated_at > ?1 AND (u2.expires_at IS NULL OR u2.expires_at > ?2)
        ORDER BY u2.updated_at DESC LIMIT 1)
@@ -106,7 +107,7 @@ ${handoffs
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span style="font-weight:600">${escapeHtml(p.display_name)}</span>
 <span class="chip${warn ? " warn" : ""}">${escapeHtml(has ? (working ? "working" : (p.kind ?? "")) : "no updates")}</span></div>
 <span class="muted small" style="white-space:nowrap">${has ? ago(now, p.updated_at!) : ""}</span>
-<div class="body"><span${has ? "" : ' class="muted"'}>${has ? escapeHtml(text) : "Nothing shared in the last 48 hours."}</span>${where ? `<span class="mono muted">${escapeHtml(where)}</span>` : ""}</div></article>`;
+<div class="body"><span${has ? "" : ' class="muted"'}>${has ? escapeHtml(text) : "Nothing shared in the last 48 hours."}</span>${where ? `<span class="mono muted">${escapeHtml(where)}</span>` : ""}${has ? detailsFold(p.details) : ""}</div></article>`;
     })
     .join("");
 
@@ -117,7 +118,7 @@ ${handoffs
     ? `<ol class="timeline card">${shown
         .map(
           (r) => `<li><span class="small"><strong style="font-weight:600">${escapeHtml(r.who)}</strong> <span class="muted">${escapeHtml(VERB[r.kind] ?? r.kind)}</span></span>
-<span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span><span class="tiny muted">${age(r.age_s)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}</span></li>`,
+<span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>${detailsFold(r.details)}<span class="tiny muted">${age(r.age_s)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}</span></li>`,
         )
         .join("")}${!showAll && rows.length > 5 ? `<li style="padding:0"><a class="more" href="/feed?all=1">Show all ${rows.length}</a></li>` : ""}</ol>`
     : `<p class="calm">Nothing shared in the last 48 hours.</p>`;
@@ -186,7 +187,7 @@ async function mePage(env: Env, viewer: Viewer, now: number): Promise<Response> 
     { id: "posts", name: "Your posts", hint: "last 7 days · status posts expire after 2 days, decisions never", empty: "Nothing posted in the last 7 days.",
       count: recent.length > POSTS_MAX ? `${POSTS_MAX}+` : String(posts.length), footer: recent.length > POSTS_MAX ? `Showing the latest ${POSTS_MAX}.` : "",
       items: posts.map((r) => `<li><div class="row"><span class="grow"><span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>
-<span class="tiny muted">${age(r.age_s)} · ${escapeHtml(r.kind)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}${r.branch ? ` · ${escapeHtml(r.branch)}` : ""}</span></span></div></li>`) },
+${detailsFold(r.details)}<span class="tiny muted">${age(r.age_s)} · ${escapeHtml(r.kind)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}${r.branch ? ` · ${escapeHtml(r.branch)}` : ""}</span></span></div></li>`) },
   ];
   return render({
     title: "Your notes",

@@ -14,6 +14,7 @@ export interface DigestRow {
   paths: string[];
   more_paths: number;
   summary: string | null;
+  details: string | null;
   age_s: number;
 }
 export interface PathOwner {
@@ -43,6 +44,7 @@ function toRow(r: ViewRow, self: boolean, now: number): DigestRow {
     paths: paths.slice(0, DIGEST_PATHS_PER_ROW),
     more_paths: Math.max(0, paths.length - DIGEST_PATHS_PER_ROW),
     summary: r.summary,
+    details: r.details,
     age_s: Math.max(0, Math.round((now - r.updated_at) / 1000)),
   };
 }

@@ -34,15 +34,19 @@ export interface NoteRow {
 /**
  * Multi-line markdown that will be read by other people's agents: keep newlines and tabs, drop
  * other control and invisible formatting characters, and replace angle brackets so nothing can
- * close a delimiter or render as HTML. Rejects (never silently trims) oversize or secret-looking text.
+ * close a delimiter or render as HTML. Scrubs only: callers check length and secrets.
  */
-export function cleanBody(raw: string): string {
-  const body = raw
+export const scrubMarkdown = (raw: string): string =>
+  raw
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029\p{Cf}]/gu, "")
     .replace(/\r\n?/g, "\n")
     .replace(/</g, "‹")
     .replace(/>/g, "›")
     .trim();
+
+/** A note body, scrubbed. Rejects (never silently trims) oversize or secret-looking text. */
+export function cleanBody(raw: string): string {
+  const body = scrubMarkdown(raw);
   if (body.length < 20) throw new HttpError(400, "too_short", "body is too short to be useful; write a few sentences");
   if (body.length > BODY_MAX) throw new HttpError(400, "too_long", `body is ${body.length} characters; keep it under ${BODY_MAX}`);
   const secret = findSecret(body);

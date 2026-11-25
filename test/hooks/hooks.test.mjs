@@ -129,6 +129,7 @@ test("after a new commit, stop asks Claude to offer a team update and post only 
   assert.equal(r.code, 0);
   assert.equal(r.json.hookSpecificOutput.hookEventName, "Stop");
   assert.match(ctx(r), /Ask the user in one short line: "Share status with team\?"/);
+  assert.match(ctx(r), /summary that starts with the repo or component, details a teammate needs/);
   assert.match(ctx(r), /Only if they say yes, call the session-link post_update tool/);
   assert.match(ctx(r), /do not post and do not ask again about this commit/);
   const a = askArgs(r);
@@ -147,6 +148,7 @@ test("with auto_post_updates on, stop tells Claude to post without asking and sa
   assert.match(ctx(r), /turned on auto-posting, so do not ask/);
   assert.doesNotMatch(ctx(r), /Share status with team/);
   assert.match(ctx(r), /tell the user in one short line what you posted/);
+  assert.match(ctx(r), /which repos and components it affects and which it does not/);
   const a = JSON.parse(ctx(r).match(/these arguments: (\{.*\})\. Then tell/)[1]);
   assert.equal(a.repo_url, REPO);
   assert.equal(a.branch, "auth-refactor");
