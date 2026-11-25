@@ -39,3 +39,4 @@ jobs:
           shellcheck -x -P plugin/session-link/scripts plugin/session-link/scripts/*.sh
           node --test test/hooks/hooks.test.mjs
           node --test test/setup.test.mjs
+          node --test test/outcomes.test.mjs
