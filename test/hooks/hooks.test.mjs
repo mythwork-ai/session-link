@@ -128,7 +128,7 @@ test("after a new commit, stop asks Claude to offer a team update and post only 
   const r = await run("stop.sh", { cwd: dir });
   assert.equal(r.code, 0);
   assert.equal(r.json.hookSpecificOutput.hookEventName, "Stop");
-  assert.match(ctx(r), /Ask the user in one short line: "Share status with team\?"/);
+  assert.match(ctx(r), /Ask the user "Share status with team\?" in one short line, then show the draft below it/);
   assert.match(ctx(r), /summary that starts with the repo or component, details a teammate needs/);
   assert.match(ctx(r), /Only if they say yes, call the session-link post_update tool/);
   assert.match(ctx(r), /do not post and do not ask again about this commit/);

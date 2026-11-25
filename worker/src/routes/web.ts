@@ -107,7 +107,7 @@ ${handoffs
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span style="font-weight:600">${escapeHtml(p.display_name)}</span>
 <span class="chip${warn ? " warn" : ""}">${escapeHtml(has ? (working ? "working" : (p.kind ?? "")) : "no updates")}</span></div>
 <span class="muted small" style="white-space:nowrap">${has ? ago(now, p.updated_at!) : ""}</span>
-<div class="body"><span${has ? "" : ' class="muted"'}>${has ? escapeHtml(text) : "Nothing shared in the last 48 hours."}</span>${where ? `<span class="mono muted">${escapeHtml(where)}</span>` : ""}${has ? detailsFold(p.details) : ""}</div></article>`;
+<div class="body"><span${has ? "" : ' class="muted"'}>${has ? escapeHtml(text) : "Nothing shared in the last 48 hours."}</span>${where ? `<span class="mono muted">${escapeHtml(where)}</span>` : ""}${has ? detailsFold(p.details, p.summary) : ""}</div></article>`;
     })
     .join("");
 
@@ -118,7 +118,7 @@ ${handoffs
     ? `<ol class="timeline card">${shown
         .map(
           (r) => `<li><span class="small"><strong style="font-weight:600">${escapeHtml(r.who)}</strong> <span class="muted">${escapeHtml(VERB[r.kind] ?? r.kind)}</span></span>
-<span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>${detailsFold(r.details)}<span class="tiny muted">${age(r.age_s)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}</span></li>`,
+<span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>${detailsFold(r.details, r.summary)}<span class="tiny muted">${age(r.age_s)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}</span></li>`,
         )
         .join("")}${!showAll && rows.length > 5 ? `<li style="padding:0"><a class="more" href="/feed?all=1">Show all ${rows.length}</a></li>` : ""}</ol>`
     : `<p class="calm">Nothing shared in the last 48 hours.</p>`;
@@ -186,8 +186,8 @@ async function mePage(env: Env, viewer: Viewer, now: number): Promise<Response> 
       count: String(m.knowledge.total), footer: capNote(m.knowledge.items.length, m.knowledge.total), items: m.knowledge.items.map((n) => noteRow(n, now, n.title, null)) },
     { id: "posts", name: "Your posts", hint: "last 7 days · status posts expire after 2 days, decisions never", empty: "Nothing posted in the last 7 days.",
       count: recent.length > POSTS_MAX ? `${POSTS_MAX}+` : String(posts.length), footer: recent.length > POSTS_MAX ? `Showing the latest ${POSTS_MAX}.` : "",
-      items: posts.map((r) => `<li><div class="row"><span class="grow"><span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>
-${detailsFold(r.details)}<span class="tiny muted">${age(r.age_s)} · ${escapeHtml(r.kind)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}${r.branch ? ` · ${escapeHtml(r.branch)}` : ""}</span></span></div></li>`) },
+      items: posts.map((r) => `<li><div class="row"><div class="grow"><span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>
+${detailsFold(r.details, r.summary)}<span class="tiny muted">${age(r.age_s)} · ${escapeHtml(r.kind)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}${r.branch ? ` · ${escapeHtml(r.branch)}` : ""}</span></div></div></li>`) },
   ];
   return render({
     title: "Your notes",

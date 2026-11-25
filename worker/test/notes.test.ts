@@ -391,7 +391,9 @@ describe("pages", () => {
     for (const [path, who] of [["/feed", "alex"], ["/me", "sam"]] as const) {
       const body = (await page(path, who)).body;
       expect(body).toContain('<details class="fold">');
-      expect(body).toContain("<h2>Scope</h2>");
+      expect(body).toContain('<p class="hd">Scope</p>');
+      expect(body).not.toContain("<h2>Scope</h2>");
+      expect(body).toContain('<span class="sr-only"> for: acme/app auth: cookie migration</span>');
       expect(body).toContain("<li>acme/app only; billing unaffected</li>");
       expect(body).not.toContain("<script>alert");
     }

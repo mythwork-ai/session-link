@@ -92,10 +92,15 @@ describe("MCP tools", () => {
     await erin("post_update", { kind: "status", summary: "no details", details: "  \n " });
     expect(await E.LEDGER_DB.prepare("SELECT details FROM updates WHERE summary = 'no details'").first("details")).toBeNull();
     expect((await erin("post_update", { kind: "status", summary: "too long", details: "x".repeat(1001) })).text).toMatch(/details is 1001 characters; keep it to 1000/);
-    expect((await erin("post_update", { kind: "status", summary: "leaky", details: "set API_KEY=abcdef123456" })).text).toMatch(/the details looks like it contains/);
+    expect((await erin("post_update", { kind: "status", summary: "at the cap", details: "x".repeat(1000) })).isError).toBe(false);
+    // A re-post on the same client_id replaces the row, details included (as auto-posts do each commit).
+    await erin("post_update", { kind: "status", summary: "first", details: "Scope: worker only.", client_id: "rp" });
+    await erin("post_update", { kind: "status", summary: "second", client_id: "rp" });
+    expect(await E.LEDGER_DB.prepare("SELECT details FROM updates WHERE client_id = 'rp'").first("details")).toBeNull();
+    expect((await erin("post_update", { kind: "status", summary: "leaky", details: "set API_KEY=abcdef123456" })).text).toMatch(/the details look like they contain/);
     expect((await erin("post_update", { kind: "status", summary: "set API_KEY=abcdef123456", details: "x".repeat(1001) })).text).toMatch(/the summary looks like it contains/);
     expect(await E.LEDGER_DB.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'redaction_reject'").first("n")).toBe(2);
-    expect(await E.LEDGER_DB.prepare("SELECT COUNT(*) AS n FROM updates").first("n")).toBe(2);
+    expect(await E.LEDGER_DB.prepare("SELECT COUNT(*) AS n FROM updates").first("n")).toBe(4);
   });
 
   it("post_update is idempotent on client_id and supersedes only your own rows", async () => {
