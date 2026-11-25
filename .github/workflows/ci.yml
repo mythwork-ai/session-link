@@ -1,0 +1,41 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+# Required checks for branch protection are the job names: "worker" and "hooks".
+# Each job skips its steps when its part of the repo isn't present on the branch
+# (hashFiles only works after checkout, so the guard is per step, not per job).
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: present
+        run: echo "yes=$([ -f worker/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.present.outputs.yes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - if: steps.present.outputs.yes == 'true'
+        working-directory: worker
+        run: npm ci && npx tsc --noEmit && npx vitest run
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: present
+        run: echo "yes=$([ -f plugin/session-link/scripts/lib.sh ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.present.outputs.yes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.present.outputs.yes == 'true'
+        run: |
+          shellcheck -x -P plugin/session-link/scripts plugin/session-link/scripts/*.sh
+          node --test test/hooks/hooks.test.mjs
+          node --test test/setup.test.mjs

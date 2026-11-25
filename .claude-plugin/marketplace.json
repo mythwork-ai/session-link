@@ -1,0 +1,5 @@
+{
+  "name": "session-link",
+  "owner": { "name": "Ethan Luh" },
+  "plugins": [{ "name": "session-link", "source": "./plugin/session-link", "description": "Team status for Claude Code sessions" }]
+}

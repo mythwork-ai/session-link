@@ -1,0 +1,23 @@
+{
+  // Template for one session-link instance. `npm run setup` writes wrangler.jsonc from this
+  // (gitignored: each org's IDs and domain stay out of the repo). Tests run against this file.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "session-link",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "workers_dev": true,
+  "d1_databases": [
+    { "binding": "LEDGER_DB", "database_name": "session-link", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "EXPORTS", "bucket_name": "session-link-exports" }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
+  // Daily: nightly export, then purge of expired rows and old events.
+  "triggers": { "crons": ["17 7 * * *"] },
+  "vars": {
+    "ALLOWED_REPOS": "github.com/example-org/*",
+    "PUBLIC_URL": "http://localhost:8787"
+  }
+  // Secrets (set by setup): WEBHOOK_SECRET, ADMIN_TOKEN, COOKIE_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+}

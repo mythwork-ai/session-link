@@ -1,0 +1,7 @@
+# Hook code runs on every teammate's machine, and the safety modules guard what reaches
+# their Claude sessions. Changes here need the owner's review (enable "Require review from
+# Code Owners" in the main branch protection rule).
+/plugin/                 @ethanluh
+/worker/src/safety/      @ethanluh
+/worker/src/auth/        @ethanluh
+/.github/                @ethanluh

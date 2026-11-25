@@ -1,0 +1,22 @@
+{
+  "name": "session-link",
+  "version": "3.0.0",
+  "description": "Links a team's Claude Code sessions through that team's own session-link server: Claude reads and posts team status through the bundled connector, and gets a warning before editing a file a teammate is changing.",
+  "author": {
+    "name": "Ethan Luh"
+  },
+  "userConfig": {
+    "server_url": {
+      "type": "string",
+      "title": "session-link server URL",
+      "description": "Your team's session-link address, e.g. https://session-link.example.com (an admin can set this for everyone in managed settings).",
+      "required": true
+    },
+    "repo_allowlist": {
+      "type": "string",
+      "title": "Team repos",
+      "description": "Comma-separated repo patterns this team shares status for, e.g. github.com/acme/* (match the server's allowlist).",
+      "required": true
+    }
+  }
+}

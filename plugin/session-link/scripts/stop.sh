@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Stop: after a milestone (a new commit since the last ask, or since session start), ask Claude
+# to offer the user a one-sentence team update and post it only if they say yes. Nothing is ever
+# shared without the user's explicit yes. No network call. SESSION_LINK_ASK_MIN sets the minimum
+# minutes between asks (default 10); 0 turns the ask off.
+SL_HOOK=stop
+# shellcheck source=lib.sh
+. "$(dirname "$0")/lib.sh"
+SL_ASK_MIN="${SESSION_LINK_ASK_MIN:-10}"
+case "$SL_ASK_MIN" in ''|*[!0-9]*) SL_ASK_MIN=10 ;; esac
+[ "$SL_ASK_MIN" -eq 0 ] && exit 0
+sl_read_input
+sl_preflight
+[ -n "$(sl_field .agent_id)" ] && exit 0
+[ "$(sl_field .stop_hook_active)" = "true" ] && exit 0   # Claude is already continuing because of a stop hook
+cwd="$(sl_field .cwd)"
+sl_resolve_repo "${cwd:-$PWD}" || exit 0
+
+head="$(sl_head)"
+[ -n "$head" ] || exit 0                       # no commits yet: no milestone to offer
+stamp="$SL_DATA/state/ask-$SL_SESSION"
+if [ ! -f "$stamp" ]; then
+  # No baseline (SessionStart didn't run): treat the current commit as already known.
+  printf '0\n%s\n' "$head" >"$stamp"; exit 0
+fi
+[ "$(sed -n 2p "$stamp")" = "$head" ] && exit 0  # no new commit since the last ask
+last="$(head -1 "$stamp")"; case "$last" in ''|*[!0-9]*) last=0 ;; esac
+[ $(( $(date +%s) - last )) -lt $((SL_ASK_MIN * 60)) ] && exit 0
+printf '%s\n%s\n' "$(date +%s)" "$head" >"$stamp"
+
+paths="$(sl_changed_paths)"
+branch="$(sl_branch)"
+# One client_id per session: each shared update replaces this session's previous one.
+args="$(printf '%s\n' "$paths" | grep . | jq -R . | jq -sc --arg r "$SL_REPO" --arg b "$branch" --arg c "session-$SL_SESSION" \
+  '{repo_url: $r} + (if $b == "" then {} else {branch: $b} end) + (if length > 0 then {paths: .} else {} end) + {client_id: $c}')"
+jq -n --arg a "$args" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext:
+  ("session-link: this session just made a new commit, which may be worth telling the team about. Ask the user in one short line: \"Share status with team?\" followed by a one-sentence draft of what was done and why. Only if they say yes, call the session-link post_update tool with kind \"progress\", that sentence (or their edited version), and these arguments: " + $a + ". If they say no or do not answer, do not post and do not ask again about this commit.")}}'
+exit 0

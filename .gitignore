@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.dev.vars
+*.log
+.DS_Store
+coverage/
+# Each instance's generated config (IDs, domain); the template is committed.
+worker/wrangler.jsonc
