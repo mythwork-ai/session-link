@@ -12,14 +12,14 @@ GROUP BY day, author_id ORDER BY day, author_id;
 -- 2. Edit warnings are shown locally by the plugin and not reported to the server (v2).
 
 -- 3. Posts per person and kind, nudged or not. (From events, which are
--- kept 30 days; the updates rows themselves expire after 2 days.)
+-- kept 30 days, while the updates rows themselves expire after 2 days.)
 SELECT author_id, json_extract(detail, '$.kind') AS kind, COUNT(*) AS posts
 FROM events WHERE type = 'intent_posted'
 GROUP BY author_id, kind ORDER BY author_id, kind;
 
--- 4. Who has gone quiet: last post per person.
+-- 4. Who has gone quiet: last post per person (presence rows don't count as posts).
 SELECT a.id, datetime(MAX(u.updated_at) / 1000, 'unixepoch') AS last_post
-FROM authors a LEFT JOIN updates u ON u.author_id = a.id AND u.source = 'mcp'
+FROM authors a LEFT JOIN updates u ON u.author_id = a.id AND u.source = 'mcp' AND u.kind != 'heartbeat'
 WHERE a.revoked_at IS NULL GROUP BY a.id ORDER BY last_post;
 
 -- 5. Rejections: redaction and allowlist misses worth a look.
@@ -31,3 +31,24 @@ GROUP BY type, reason, code ORDER BY n DESC;
 SELECT type, author_id, COUNT(*) AS n
 FROM events WHERE type IN ('handoff_created', 'handoff_accepted', 'knowledge_saved', 'knowledge_searched')
 GROUP BY type, author_id ORDER BY type, author_id;
+
+-- 7. Overlaps: two people's shared paths met in a repo, counted once per pair, repo and 4-hour
+-- window. Fewer late collisions is the point. Compare with scripts/outcomes.mjs for PR conflicts.
+SELECT json_extract(detail, '$.repo') AS repo,
+       MIN(author_id, json_extract(detail, '$.with')) || ' + ' || MAX(author_id, json_extract(detail, '$.with')) AS pair,
+       COUNT(*) AS overlaps, SUM(json_extract(detail, '$.files')) AS files
+FROM events WHERE type = 'overlap_detected'
+GROUP BY repo, pair ORDER BY overlaps DESC;
+
+-- 8. Presence adoption: who shares presence, and on how many days.
+SELECT author_id, COUNT(DISTINCT date(created_at / 1000, 'unixepoch')) AS days, COUNT(*) AS calls
+FROM events WHERE type = 'presence_set'
+GROUP BY author_id ORDER BY days DESC;
+
+-- 9. Reviewer context and notes to yourself.
+SELECT author_id,
+       SUM(type = 'pr_context_served') AS pr_context_calls,
+       SUM(type = 'pr_context_served' AND json_extract(detail, '$.empty') = 0) AS pr_context_non_empty,
+       SUM(type = 'handoff_created' AND json_extract(detail, '$.self') = 1) AS notes_to_self
+FROM events WHERE type IN ('pr_context_served', 'handoff_created')
+GROUP BY author_id ORDER BY author_id;

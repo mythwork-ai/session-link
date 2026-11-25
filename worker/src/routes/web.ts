@@ -43,6 +43,7 @@ interface Latest {
   display_name: string;
   kind: string | null;
   summary: string | null;
+  paths: string | null;
   repo: string | null;
   branch: string | null;
   updated_at: number | null;
@@ -55,8 +56,20 @@ async function feedPage(env: Env, req: Request, viewer: Viewer, now: number): Pr
   const since = now - 48 * 3_600_000;
   const allow = await loadAllowlist(env);
 
-  // Needs you: handoffs addressed to the viewer.
-  const handoffs = await handoffsFor(env, viewer.login, now);
+  // Needs you: handoffs addressed to the viewer. Notes they left themselves get their own section.
+  const all = await handoffsFor(env, viewer.login, now);
+  const handoffs = all.filter((n) => n.author_id !== viewer.login);
+  const mine = all.filter((n) => n.author_id === viewer.login);
+  const leftOff = mine.length
+    ? `<section class="needs" aria-labelledby="left-off"><h2 id="left-off" class="eyebrow">Where you left off</h2>
+${mine
+  .map(
+    (n) => `<a class="handoff" href="/notes/${escapeHtml(n.id)}"><span style="font-weight:600">${escapeHtml(n.title)}</span>
+<span class="mono muted">${escapeHtml(n.repo ?? "team")}${n.branch ? ` · ${escapeHtml(n.branch)}` : ""}</span>
+<span class="muted small" style="margin-left:auto">${ago(now, n.updated_at)}</span><span class="btn" style="min-height:36px">Open note</span></a>`,
+  )
+  .join("")}</section>`
+    : "";
   const needs = handoffs.length
     ? `<section class="needs" aria-labelledby="needs"><h2 id="needs" class="eyebrow">Needs you</h2>
 ${handoffs
@@ -67,10 +80,11 @@ ${handoffs
   )
   .join("")}</section>`
     : `<p class="calm">Nothing needs you right now.</p>`;
+  const top = needs + leftOff;
 
   // Team now: each person's latest update from the last 48 hours.
   const { results: team } = await env.LEDGER_DB.prepare(
-    `SELECT a.id, a.display_name, u.kind, u.summary, u.repo, u.branch, u.updated_at
+    `SELECT a.id, a.display_name, u.kind, u.summary, u.paths, u.repo, u.branch, u.updated_at
      FROM authors a LEFT JOIN updates u ON u.id = (
        SELECT u2.id FROM updates u2 WHERE u2.author_id = a.id AND u2.updated_at > ?1 AND (u2.expires_at IS NULL OR u2.expires_at > ?2)
        ORDER BY u2.updated_at DESC LIMIT 1)
@@ -83,12 +97,16 @@ ${handoffs
     .map((p) => {
       const has = p.updated_at !== null && (p.repo === null || isAllowed(p.repo, allow));
       const warn = has && p.kind === "blocker";
-      const where = has ? [p.repo ?? "team", p.branch].filter(Boolean).join(" · ") : "";
+      // Presence rows carry no summary: say what's in progress instead.
+      const working = has && p.kind === "heartbeat";
+      const where = has ? [p.repo ?? "team", working ? null : p.branch].filter(Boolean).join(" · ") : "";
+      const files = working ? (JSON.parse(p.paths ?? "[]") as string[]).length : 0;
+      const text = working ? `Working on ${p.branch ?? "a branch"} · ${files} file${files === 1 ? "" : "s"}` : (p.summary ?? "");
       return `<article class="card person${warn ? " warn" : ""}"><span class="avatar lg" aria-hidden="true">${initial(p.display_name)}</span>
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span style="font-weight:600">${escapeHtml(p.display_name)}</span>
-<span class="chip${warn ? " warn" : ""}">${escapeHtml(has ? (p.kind ?? "") : "no updates")}</span></div>
+<span class="chip${warn ? " warn" : ""}">${escapeHtml(has ? (working ? "working" : (p.kind ?? "")) : "no updates")}</span></div>
 <span class="muted small" style="white-space:nowrap">${has ? ago(now, p.updated_at!) : ""}</span>
-<div class="body"><span${has ? "" : ' class="muted"'}>${has ? escapeHtml(p.summary ?? "") : "Nothing shared in the last 48 hours."}</span>${where ? `<span class="mono muted">${escapeHtml(where)}</span>` : ""}</div></article>`;
+<div class="body"><span${has ? "" : ' class="muted"'}>${has ? escapeHtml(text) : "Nothing shared in the last 48 hours."}</span>${where ? `<span class="mono muted">${escapeHtml(where)}</span>` : ""}</div></article>`;
     })
     .join("");
 
@@ -99,7 +117,7 @@ ${handoffs
     ? `<ol class="timeline card">${shown
         .map(
           (r) => `<li><span class="small"><strong style="font-weight:600">${escapeHtml(r.who)}</strong> <span class="muted">${escapeHtml(VERB[r.kind] ?? r.kind)}</span></span>
-<span class="small">${escapeHtml(r.summary ?? r.paths.join(", "))}</span><span class="tiny muted">${age(r.age_s)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}</span></li>`,
+<span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span><span class="tiny muted">${age(r.age_s)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}</span></li>`,
         )
         .join("")}${!showAll && rows.length > 5 ? `<li style="padding:0"><a class="more" href="/feed?all=1">Show all ${rows.length}</a></li>` : ""}</ol>`
     : `<p class="calm">Nothing shared in the last 48 hours.</p>`;
@@ -131,7 +149,7 @@ ${"snippet" in n ? `<span class="small muted">${escapeHtml(String((n as NoteRow 
     title: "Team status",
     viewer,
     q,
-    body: `<main>${needs}
+    body: `<main>${top}
 <div class="cols">
 <section class="col-main" aria-labelledby="team"><div class="head"><h2 id="team">Team now</h2><span class="muted small">latest from each person</span></div>${people}</section>
 <section class="col-side" aria-labelledby="act"><div class="head"><h2 id="act">Last 48 hours</h2></div>${activity}</section>
@@ -161,8 +179,11 @@ async function notePage(env: Env, viewer: Viewer, id: string, now: number, notic
   }
   const isHandoff = n.kind === "handoff";
   const toMe = isHandoff && n.to_author === viewer.login;
-  const badge = isHandoff ? (toMe ? "Handoff to you" : "Handoff") : "Team knowledge";
-  const byline = isHandoff
+  const selfNote = isHandoff && n.to_author === n.author_id;
+  const badge = selfNote ? "Note to yourself" : isHandoff ? (toMe ? "Handoff to you" : "Handoff") : "Team knowledge";
+  const byline = selfNote
+    ? `Where you left off · ${ago(now, n.updated_at)} · ${n.status === "open" ? "open" : "picked up"}`
+    : isHandoff
     ? `From ${escapeHtml(n.display_name)} to ${escapeHtml(n.to_author ?? "")} · ${ago(now, n.updated_at)} · ${escapeHtml(n.status ?? "")}`
     : `By ${escapeHtml(n.display_name)} · updated ${ago(now, n.updated_at)}`;
   const paths = JSON.parse(n.paths) as string[];
@@ -170,12 +191,12 @@ async function notePage(env: Env, viewer: Viewer, id: string, now: number, notic
   const meta = [n.repo ?? "team", n.branch ? `branch ${n.branch}` : "", paths.slice(0, 6).join(", ") + (paths.length > 6 ? ` +${paths.length - 6}` : "")].filter(Boolean);
   const take =
     toMe && n.status === "open" && viewer.role !== "viewer"
-      ? `<form method="post" action="/notes/${escapeHtml(n.id)}/accept" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><button class="btn primary">Take it on</button>
-<span class="muted small">Marks it accepted so ${escapeHtml(n.display_name)} knows. Your Claude session can also do this.</span></form>`
+      ? `<form method="post" action="/notes/${escapeHtml(n.id)}/accept" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><button class="btn primary">${selfNote ? "Mark picked up" : "Take it on"}</button>
+<span class="muted small">${selfNote ? "Hides it from Where you left off." : `Marks it accepted so ${escapeHtml(n.display_name)} knows.`} Your Claude session can also do this.</span></form>`
       : toMe && n.status === "open"
         ? `<p class="calm">Viewers can read handoffs but can't take them on. Ask an admin to make you an editor.</p>`
         : toMe
-          ? `<p class="calm">You took this on.</p>`
+          ? `<p class="calm">${selfNote ? "You picked this back up." : "You took this on."}</p>`
           : "";
   return render({
     title: n.title,

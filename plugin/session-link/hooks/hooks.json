@@ -1,11 +1,12 @@
 {
-  "description": "session-link: nudges Claude to read and post team status through the connector, and warns before editing a file a teammate is changing",
+  "description": "session-link: nudges Claude to read and post team status through the connector, warns before editing a file a teammate is changing, points at team knowledge, shares presence when the user opted in, and offers team context for new PRs",
   "hooks": {
     "SessionStart": [
       { "matcher": "startup|resume|clear|compact", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"", "timeout": 5 }] }
     ],
     "PostToolUse": [
-      { "matcher": "mcp__.*__read_feed", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.sh\"", "timeout": 5 }] }
+      { "matcher": "mcp__.*__read_feed", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.sh\"", "timeout": 5 }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/post-bash.sh\"", "timeout": 5 }] }
     ],
     "PreToolUse": [
       { "matcher": "Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/pre-tool-use.sh\"", "timeout": 3 }] }

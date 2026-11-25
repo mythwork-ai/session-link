@@ -62,7 +62,7 @@ export async function buildView(env: Env, v: Viewer): Promise<{ rows: DigestRow[
 
   for (const r of local) {
     const self = r.author_id === v.authorId;
-    if (self && !(r.kind === "heartbeat" && r.session_id !== v.sessionId)) continue;
+    if (self && !(r.kind === "heartbeat" && r.session_id !== null && r.session_id !== v.sessionId)) continue;
     const row = toRow(r, self, v.now);
     if (rows.length < DIGEST_REPO_ROWS) rows.push(row);
     // Any row that names paths marks them as in progress: posts and (webhook) pushes.

@@ -11,6 +11,7 @@ export const BODY_MAX = 16_000;
 export const TITLE_MAX = 120;
 const HANDOFF_OPEN_TTL = 30 * DAY;
 const HANDOFF_ACCEPTED_TTL = 14 * DAY;
+export const SELF_NOTE_TTL = 14 * DAY;
 
 export interface NoteRow {
   id: string;
@@ -82,11 +83,13 @@ export interface NewNote {
   to_author?: string | null;
   client_id: string;
   supersedes?: string | null;
+  /** Handoffs only: lifetime while open, if not the default 30 days (notes to yourself use 14). */
+  ttl?: number;
 }
 
 /** Insert, or update in place on (author_id, client_id) so retries never duplicate a note. */
 export async function upsertNote(env: Env, n: NewNote, now: number): Promise<string> {
-  const expires = n.kind === "handoff" ? now + HANDOFF_OPEN_TTL : null;
+  const expires = n.kind === "handoff" ? now + (n.ttl ?? HANDOFF_OPEN_TTL) : null;
   const row = await env.LEDGER_DB.prepare(
     `INSERT INTO notes (id, author_id, kind, title, body, tags, repo, branch, paths, links, to_author, status, client_id, supersedes, created_at, updated_at, expires_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?15, ?16)
@@ -133,7 +136,7 @@ export async function acceptHandoff(env: Env, id: string, viewer: string, now: n
 }
 
 export async function handoffsFor(env: Env, login: string, now: number): Promise<NoteRow[]> {
-  const { results } = await env.LEDGER_DB.prepare(`${SELECT} WHERE n.kind = 'handoff' AND n.to_author = ? AND n.status = 'open' AND ${LIVE} ORDER BY n.updated_at DESC LIMIT 10`)
+  const { results } = await env.LEDGER_DB.prepare(`${SELECT} WHERE n.kind = 'handoff' AND n.to_author = ? AND n.status = 'open' AND ${LIVE} ORDER BY n.author_id = n.to_author, n.updated_at DESC LIMIT 15`)
     .bind(login, now)
     .all<NoteRow>();
   return visible(env, results);
@@ -181,6 +184,30 @@ export async function retire(env: Env, id: string, author: string, now: number):
   if (r.meta.changes === 0) throw new HttpError(404, "no_note", "supersedes must name one of your own knowledge notes");
 }
 
+/** Knowledge notes for a repo, indexed by the paths they list ("Where things live"), for the pre-edit hint. */
+const KNOWLEDGE_PATHS_MAX = 200;
+
+export async function knowledgePaths(env: Env, repo: string, now: number): Promise<Record<string, { id: string; title: string }[]>> {
+  const { results } = await env.LEDGER_DB.prepare(
+    `${SELECT} WHERE n.kind = 'knowledge' AND n.repo = ? AND n.paths != '[]' AND ${LIVE} ORDER BY n.updated_at DESC LIMIT 100`,
+  )
+    .bind(repo, now)
+    .all<NoteRow>();
+  const index: Record<string, { id: string; title: string }[]> = Object.create(null);
+  let n = 0;
+  for (const note of await visible(env, results)) {
+    for (const p of JSON.parse(note.paths) as string[]) {
+      if (!Object.hasOwn(index, p)) {
+        if (n >= KNOWLEDGE_PATHS_MAX) continue;
+        index[p] = [];
+        n++;
+      }
+      if (index[p]!.length < 3) index[p]!.push({ id: note.id, title: note.title });
+    }
+  }
+  return index;
+}
+
 export const summarize = (n: NoteRow, now: number) => ({
   id: n.id,
   kind: n.kind,
@@ -188,6 +215,7 @@ export const summarize = (n: NoteRow, now: number) => ({
   from: n.display_name,
   author: n.author_id,
   to: n.to_author,
+  ...(n.kind === "handoff" && n.to_author === n.author_id ? { self: true } : {}),
   status: n.status,
   repo: n.repo,
   branch: n.branch,

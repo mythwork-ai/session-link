@@ -101,7 +101,7 @@ collect_paths() {
 collapse() {
   local list i=0; list="$(sort -u)"
   while [ "$(printf '%s\n' "$list" | grep -c .)" -gt "$SL_PATHS_MAX" ] && [ $i -lt 8 ]; do
-    list="$(printf '%s\n' "$list" | sed -E 's#/$##; s#/[^/]*$#/#' | sort -u)"; i=$((i + 1))
+    list="$(printf '%s\n' "$list" | sed -E 's#^(.+)/[^/]+/?$#\1/#' | sort -u)"; i=$((i + 1))
   done
   printf '%s\n' "$list" | grep . | head -n "$SL_PATHS_MAX"
 }
@@ -122,8 +122,9 @@ sl_head() { g rev-parse -q --verify HEAD 2>/dev/null; }
 
 sl_cache_file() { printf '%s/cache/%s.json' "$SL_DATA" "$SL_SESSION"; }
 
-# Writes the path->owners map from a read_feed result into this session's cache, after shape
-# checks. $1 is the result JSON ({repo, map, ...}); the repo must be a normalized, allowlisted one.
+# Writes the path->owners map and the path->knowledge-notes index from a read_feed result into this
+# session's cache, after shape checks. $1 is the result JSON ({repo, map, knowledge_paths, ...});
+# the repo must be a normalized, allowlisted one.
 sl_write_cache() {
   local reply="$1" tmp repo
   repo="$(printf '%s' "$reply" | jq -r '.repo // empty' 2>/dev/null)"
@@ -136,7 +137,12 @@ sl_write_cache() {
       {repo: $repo, written_at: now | floor,
        map: (.map | with_entries(select((.key | type) == "string" and (.key | length) <= 200 and (.value | type) == "array"))
                   | with_entries(.value |= [.[:5][] | {who: (.who | tostring | .[:60]), author: (.author // "" | tostring | .[:39]),
-                                                        branch: (.branch // "" | tostring | .[:100]), age_s: ((.age_s // 0) | tonumber? // 0)}]))}
+                                                        branch: (.branch // "" | tostring | .[:100]), age_s: ((.age_s // 0) | tonumber? // 0)}])),
+       knowledge: (if (.knowledge_paths | type) == "object" then
+                     .knowledge_paths | with_entries(select((.key | type) == "string" and (.key | length) <= 200 and (.value | type) == "array"))
+                     | with_entries(.value |= [.[:3][] | select(type == "object" and (.id | type) == "string" and (.id | test("^[0-9a-f-]{36}$")))
+                                                       | {id, title: (.title // "" | tostring | .[:120])}])
+                   else {} end)}
     else error("bad map") end' >"$tmp" 2>/dev/null && mv -f "$tmp" "$(sl_cache_file)" && return 0
   rm -f "$tmp"; sl_log "reply had no valid map; cache not updated"; return 1
 }
@@ -148,5 +154,5 @@ sl_gc() {
 
 # jq function that makes untrusted text safe to place in context: one line, no delimiters, capped.
 # shellcheck disable=SC2016  # jq program, not shell expansion
-SL_JQ_CLEAN='def clean($n): tostring | gsub("[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]"; " ") | gsub("<"; "‹") | gsub(">"; "›") | gsub("`"; "'"'"'") | gsub(" +"; " ") | if length > $n then .[:($n-1)] + "…" else . end;
+SL_JQ_CLEAN='def clean($n): tostring | gsub("[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]"; " ") | gsub("<"; "‹") | gsub(">"; "›") | gsub("`"; "'"'"'") | gsub("\""; "'"'"'") | gsub(" +"; " ") | if length > $n then .[:($n-1)] + "…" else . end;
 def age: if . < 90 then "just now" elif . < 5400 then "\((. / 60) | floor)m ago" elif . < 172800 then "\((. / 3600) | floor)h ago" else "\((. / 86400) | floor)d ago" end;'

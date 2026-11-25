@@ -81,7 +81,7 @@ describe("handoffs", () => {
     expect((await (await client("sam"))("get_note", { id: data.handed_off })).isError).toBe(false);
   });
 
-  it("refuses unknown or revoked recipients and handing off to yourself", async () => {
+  it("refuses unknown or revoked recipients", async () => {
     await author("sam");
     await author("gone");
     await call("POST", "/v1/admin/authors/gone/revoke", { headers: ADMIN });
@@ -89,7 +89,6 @@ describe("handoffs", () => {
     const base = { title: "Something", body: HANDOFF_BODY, repo_url: REPO };
     expect((await s("create_handoff", { ...base, to: "nobody" })).text).toMatch(/isn't on the session-link roster/);
     expect((await s("create_handoff", { ...base, to: "gone" })).text).toMatch(/isn't on the session-link roster/);
-    expect((await s("create_handoff", { ...base, to: "sam" })).text).toMatch(/yourself/);
   });
 });
 

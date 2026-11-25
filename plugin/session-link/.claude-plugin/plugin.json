@@ -1,6 +1,6 @@
 {
   "name": "session-link",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Links a team's Claude Code sessions through that team's own session-link server: Claude reads and posts team status through the bundled connector, and gets a warning before editing a file a teammate is changing.",
   "author": {
     "name": "Ethan Luh"
@@ -17,6 +17,13 @@
       "title": "Team repos",
       "description": "Comma-separated repo patterns this team shares status for, e.g. github.com/acme/* (match the server's allowlist).",
       "required": true
+    },
+    "share_presence": {
+      "type": "boolean",
+      "title": "Share presence",
+      "description": "Let Claude share which branch and files you're editing in team repos, without asking each time. No summaries or file contents. Off by default.",
+      "default": false,
+      "required": false
     }
   }
 }
