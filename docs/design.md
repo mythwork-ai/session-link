@@ -115,6 +115,7 @@ Usage counts say whether people use the tool, not whether the team got faster. T
 - **It only knows what people share.** Unshared or uncommitted work is invisible, except for people with presence on.
 - **Edit warnings cover the last 4 hours** of shared activity.
 - **It's Cloudflare-only.**
+- **No folder-tree install:** Claude Code reads a project-scope plugin only in the folder a session starts in. The README recommends a user-scope install, and the hooks' repo allowlist keeps it silent outside team repos. The connector's tools still load in every session. Unverified: whether `claude plugin install` run through `!` prompts for the server URL and repos, so the README has people set them in `/plugin` either way.
 - **Unverified:** whether a managed `pluginConfigs` value also suppresses the enable prompt for members.
 - **Unverified:** how reliably Claude makes the quiet `set_presence` call when the hook asks.
 - **The conflict measure is a proxy:** GitHub reports only whether a PR conflicts now.

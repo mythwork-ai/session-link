@@ -181,10 +181,12 @@ async function notePage(env: Env, viewer: Viewer, id: string, now: number, notic
   const toMe = isHandoff && n.to_author === viewer.login;
   const selfNote = isHandoff && n.to_author === n.author_id;
   const badge = selfNote ? "Note to yourself" : isHandoff ? (toMe ? "Handoff to you" : "Handoff") : "Team knowledge";
+  // The recipient's display name, as people know them; their login if they're no longer on the roster.
+  const toName = n.to_author ? ((await env.LEDGER_DB.prepare("SELECT display_name FROM authors WHERE id = ?").bind(n.to_author).first<string>("display_name")) ?? n.to_author) : "";
   const byline = selfNote
     ? `Where you left off · ${ago(now, n.updated_at)} · ${n.status === "open" ? "open" : "picked up"}`
     : isHandoff
-    ? `From ${escapeHtml(n.display_name)} to ${escapeHtml(n.to_author ?? "")} · ${ago(now, n.updated_at)} · ${escapeHtml(n.status ?? "")}`
+    ? `From ${escapeHtml(n.display_name)} to ${escapeHtml(toName)} · ${ago(now, n.updated_at)} · ${escapeHtml(n.status ?? "")}`
     : `By ${escapeHtml(n.display_name)} · updated ${ago(now, n.updated_at)}`;
   const paths = JSON.parse(n.paths) as string[];
   const links = JSON.parse(n.links) as string[];
