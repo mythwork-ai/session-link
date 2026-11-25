@@ -33,10 +33,10 @@ Claude reads and writes it through a connector (an MCP server). People read it i
 
 | Choice | Why |
 |---|---|
-| **Nothing is shared without your yes** | What's shared is what you meant to share, with the why, not a stream of automatic logs that can leak secrets or read as surveillance. The exceptions are presence and auto-posting, which you turn on once; presence carries no prose, and Claude tells you each auto-post. |
+| **Nothing is shared without your yes** | What's shared is what you meant to share, with the why, not a stream of automatic logs that can leak secrets or read as surveillance. The exceptions are presence, auto-posting and the close-out on exit, which you turn on once; presence carries no prose, Claude tells you each auto-post in the session, and the close-out logs what it saved. |
 | **Curated notes, not transcripts** | Transcripts carry secrets, customer data and noise. Nobody can meaningfully approve sharing 200 KB of chat. |
 | **Claude reads and writes through one connector** | One data path and one sign-in, with no tokens on disk. |
-| **Hooks only prompt; they never send** | The hooks work out local facts (repo, branch, changed files) and hand them to Claude. They make no network calls. |
+| **Hooks only prompt; they never send** | The hooks work out local facts (repo, branch, changed files) and hand them to Claude. They make no network calls; the opt-in close-out starts a background Claude that uses the connector. |
 | **Invite-only, with roles** | Admins decide who gets in: viewer (read), editor (also write), admin (also manage people). GitHub sign-in only proves who you are. |
 | **One instance per org, one shared plugin** | Each org owns its data. The plugin's server URL is a setting an org admin can set for everyone, so updates reach every org from one place. |
 
@@ -62,9 +62,9 @@ Claude reads and writes it through a connector (an MCP server). People read it i
 ## How it's built
 
 - **Server:** a Cloudflare Worker with a D1 (SQLite) database, using full-text search for knowledge. GitHub OAuth goes through `@cloudflare/workers-oauth-provider`, and the MCP tools use the official MCP SDK. Nightly backups go to R2.
-- **Client:** a Claude Code plugin that bundles the connector and five shell hooks: SessionStart, Stop, PreToolUse on edits, and PostToolUse on `read_feed` and on `Bash`.
+- **Client:** a Claude Code plugin that bundles the connector and six shell hooks: SessionStart, Stop, SessionEnd, PreToolUse on edits, and PostToolUse on `read_feed` and on `Bash`.
 - **Setup:** `npm run setup` stands up a new instance in any org's Cloudflare account in about ten minutes.
-- **Tests:** 117 server tests run against a real local D1, R2 and KV; 42 hook tests run against fixture git repos; 8 setup and 6 outcomes tests.
+- **Tests:** 117 server tests run against a real local D1, R2 and KV; 54 hook tests run against fixture git repos; 8 setup and 6 outcomes tests.
 
 ## Limits, honestly
 

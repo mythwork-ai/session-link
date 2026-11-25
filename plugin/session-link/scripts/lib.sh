@@ -2,7 +2,8 @@
 # Shared helpers for session-link hooks. Sourced, never executed.
 # shellcheck disable=SC2034  # SL_* variables are used by the scripts that source this file
 # Rules: never block a session (always exit 0), never make network calls (Claude reads and
-# writes through the MCP connector), never eval tool output, write only under $SL_DATA, log
+# writes through the MCP connector; session-end.sh, when the user opts in, starts a background
+# Claude that does the same), never eval tool output, write only under $SL_DATA, log
 # every failure. Works on macOS bash 3.2.
 
 # Cache, state and log live here; no environment variable can move it. The allowlist comes from
@@ -31,6 +32,7 @@ sl_field() { printf '%s' "$SL_INPUT" | jq -r "$1 // empty" 2>/dev/null; }
 # Exits quietly when the hook should not run at all.
 sl_preflight() {
   [ "${SESSION_LINK_OFF:-}" = "1" ] && exit 0
+  [ -n "${SESSION_LINK_CLOSEOUT:-}" ] && exit 0   # inside session-end.sh's background close-out
   command -v jq >/dev/null 2>&1 || { sl_log "jq not installed; session-link disabled"; exit 0; }
   command -v git >/dev/null 2>&1 || { sl_log "git not installed; session-link disabled"; exit 0; }
   SL_SESSION="$(sl_field .session_id)"
@@ -150,9 +152,11 @@ sl_write_cache() {
   rm -f "$tmp"; sl_log "reply had no valid map; cache not updated"; return 1
 }
 
-# Deletes per-session files older than two days.
+# Deletes per-session files older than two days (cache and state by whole days).
 sl_gc() {
   find "$SL_DATA/cache" "$SL_DATA/state" -type f -mtime +2 -delete 2>/dev/null
+  # Close-out transcript copies and logs: gone at the first session start two days after they were written.
+  [ -d "$SL_DATA/closeout" ] && { find "$SL_DATA/closeout" -type f -mmin +2880 -delete || sl_log "couldn't clean $SL_DATA/closeout"; }
 }
 
 # jq function that makes untrusted text safe to place in context: one line, no delimiters, capped.

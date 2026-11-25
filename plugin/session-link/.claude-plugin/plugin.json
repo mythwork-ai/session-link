@@ -1,6 +1,6 @@
 {
   "name": "session-link",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Links a team's Claude Code sessions through that team's own session-link server: Claude reads and posts team status through the bundled connector, and gets a warning before editing a file a teammate is changing.",
   "author": {
     "name": "Ethan Luh"
@@ -36,6 +36,13 @@
       "type": "boolean",
       "title": "Automatic notes to self",
       "description": "Let Claude save where you left off when you pause or stop mid-task, and load that note at your next session, without asking. These notes are visible only to you and expire after 14 days. Off by default.",
+      "default": false,
+      "required": false
+    },
+    "auto_closeout": {
+      "type": "boolean",
+      "title": "Close out sessions on exit",
+      "description": "When a session in a team repo ends (not on /clear), start a background Claude with no file or shell tools that saves where you left off as a note to self, if work stopped mid-task. With auto-posting also on, it can post a commit update the session never shared. Uses your Claude account; the transcript copy stays on this machine for about two days. Off by default.",
       "default": false,
       "required": false
     }

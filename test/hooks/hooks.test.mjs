@@ -502,7 +502,134 @@ test("post-bash is silent for other commands, failed creates, and other repos", 
   assert.equal((await bash(other, "gh pr create --title x", PR)).out, "");
 });
 
+// session-end: a stand-in `claude` on PATH records its arguments and stdin instead of starting a session.
+function closeoutSetup({ turns = 3, calls = 1, extra = [] } = {}) {
+  const bin = mkdtempSync(join(tmpdir(), "sl-bin-"));
+  homes.push(bin);
+  writeFileSync(join(bin, "claude"), `#!/bin/bash\ncat > "${bin}/stdin"\nprintf '%s\\n' "$@" > "${bin}/args.tmp"\necho "guard=$SESSION_LINK_CLOSEOUT" >> "${bin}/args.tmp"\nmv "${bin}/args.tmp" "${bin}/args"\n`, { mode: 0o755 });
+  const transcript = join(bin, "t.jsonl");
+  const lines = ["not json", JSON.stringify({ type: "assistant", message: { content: ["a bare string", null] } })];
+  for (let i = 0; i < turns; i++) {
+    lines.push(JSON.stringify({ type: "user", message: { content: `ask ${i}` } }));
+    const blocks = [{ type: "text", text: `answer ${i}` }];
+    for (let c = 0; c < calls; c++) blocks.push({ type: "tool_use", name: "Edit", input: { file_path: "a.ts" } });
+    lines.push(JSON.stringify({ type: "assistant", message: { content: blocks } }));
+  }
+  lines.push(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "SECRET_FILE_BODY" }] } }));
+  lines.push(...extra, JSON.stringify({ type: "attachment" }));
+  writeFileSync(transcript, lines.join("\n") + "\n");
+  return { bin, transcript, env: { PATH: `${bin}:${process.env.PATH}`, CLAUDE_PLUGIN_OPTION_AUTO_CLOSEOUT: "true" } };
+}
+async function closeoutRun(bin, tries = 40) {
+  for (let i = 0; i < tries && !existsSync(join(bin, "args")); i++) await new Promise((r) => setTimeout(r, 50));
+  if (!existsSync(join(bin, "args"))) return null;
+  return { args: readFileSync(join(bin, "args"), "utf8"), stdin: readFileSync(join(bin, "stdin"), "utf8") };
+}
+
+test("session-end starts a locked-down background close-out with the condensed transcript on stdin", async () => {
+  const { bin, transcript, env } = closeoutSetup();
+  const r = await run("session-end.sh", { cwd: repo(), transcript_path: transcript, reason: "prompt_input_exit" }, env);
+  assert.equal(r.code, 0);
+  assert.equal(r.out, "", "nothing goes into the ending session");
+  const { args, stdin } = await closeoutRun(bin);
+  assert.match(args, /^-p$/m);
+  assert.match(args, /^--tools\n\n/m, "no built-in tools");
+  assert.match(args, /^--permission-mode\ndontAsk$/m, "anything not allowed is denied");
+  assert.match(args, /^--no-session-persistence$/m);
+  assert.match(args, /^--max-budget-usd\n2$/m, "spend is capped");
+  assert.match(args, /client_id\s+"self-sess1"/);
+  assert.match(args, /guard=1/, "the background run's own hooks stay quiet");
+  assert.match(args, /^mcp__plugin_session-link_ledger__create_handoff$/m);
+  assert.match(args, /^--disallowedTools\nmcp__plugin_session-link_ledger__post_update$/m, "no posting without auto_post_updates");
+  assert.match(stdin, /^USER: ask 0$/m);
+  assert.match(stdin, /^ASSISTANT: answer 2$/m);
+  assert.match(stdin, /^TOOL: Edit \{"file_path":"a.ts"\}$/m);
+  assert.doesNotMatch(stdin, /bare string/, "odd content and unparsable lines are skipped");
+  assert.doesNotMatch(stdin, /SECRET_FILE_BODY/, "tool output never leaves the transcript");
+});
+
+test("session-end keeps the start and end of a long transcript", async () => {
+  const big = JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "x".repeat(300000) }] } });
+  const { bin, transcript, env } = closeoutSetup({ extra: [big, JSON.stringify({ type: "user", message: { content: "last words" } })] });
+  await run("session-end.sh", { cwd: repo(), transcript_path: transcript }, env);
+  const { stdin } = await closeoutRun(bin);
+  assert.match(stdin, /^USER: ask 0$/m);
+  assert.match(stdin, /middle of the session cut/);
+  assert.match(stdin, /^USER: last words$/m);
+  assert.ok(stdin.length < 210000);
+});
+
+test("session-end reads only the ends of a transcript over 8 MB and still keeps its first message", async () => {
+  const filler = JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "y".repeat(100000) }] } });
+  const { bin, transcript, env } = closeoutSetup({ extra: [...Array(90).fill(filler), JSON.stringify({ type: "user", message: { content: "last words" } })] });
+  const r = await run("session-end.sh", { cwd: repo(), transcript_path: transcript }, env);
+  const { stdin } = await closeoutRun(bin);
+  assert.match(stdin, /^USER: ask 0$/m, "the real start, not the start of the last 8 MB");
+  assert.match(stdin, /^USER: last words$/m);
+  assert.ok(stdin.length < 210000);
+  assert.ok(r.ms < 5000, `took ${r.ms}ms`);
+});
+
+test("session-end posts only a commit the Stop hook never asked about, with auto-posting on", async () => {
+  const dir = repo();
+  await started(dir);
+  const go = async (extraEnv = {}) => {
+    const { bin, transcript, env } = closeoutSetup();
+    await run("session-end.sh", { cwd: dir, transcript_path: transcript }, { ...env, ...AUTO, ...extraEnv });
+    return (await closeoutRun(bin)).args;
+  };
+  const canPost = (args) => /^--allowedTools\n(mcp__\S+\n)*mcp__plugin_session-link_ledger__post_update$/m.test(args) && !args.includes("--disallowedTools");
+  assert.ok(!canPost(await go()), "no new commit");
+  commit(dir, "new.ts");
+  const args = await go();
+  assert.ok(canPost(args));
+  assert.match(args, /client_id\s+"session-sess1"/, "replaces this session's earlier post");
+  assert.match(args, /"new.ts"/);
+  assert.ok(!canPost(await go({ SESSION_LINK_ASK_MIN: "0" })), "ASK_MIN=0 turns it off");
+  await run("stop.sh", { cwd: dir }, { SESSION_LINK_ASK_MIN: "0" });
+  await run("stop.sh", { cwd: dir });
+  assert.ok(!canPost(await go()), "the Stop hook already asked about it");
+});
+
+test("session-end does nothing when off, on /clear, outside team repos, for short sessions, or inside a close-out", async () => {
+  const cases = [
+    ["setting off", {}, { CLAUDE_PLUGIN_OPTION_AUTO_CLOSEOUT: "false" }],
+    ["/clear", { reason: "clear" }, {}],
+    ["other repo", { cwd: repo({ remote: "git@github.com:someone/else.git" }) }, {}],
+    ["short session", {}, {}, 2],
+    ["recursion", {}, { SESSION_LINK_CLOSEOUT: "1" }],
+    ["no transcript", { transcript_path: "" }, {}],
+    ["subagent", { agent_id: "a1" }, {}],
+  ];
+  for (const [name, input, extra, turns] of cases) {
+    const { bin, transcript, env } = closeoutSetup({ turns });
+    const r = await run("session-end.sh", { cwd: repo(), transcript_path: transcript, ...input }, { ...env, ...extra });
+    assert.equal(r.code, 0, name);
+    assert.equal(await closeoutRun(bin, 20), null, name);
+  }
+  const { bin, transcript, env } = closeoutSetup({ turns: 2, calls: 3 });
+  await run("session-end.sh", { cwd: repo(), transcript_path: transcript }, env);
+  assert.ok(await closeoutRun(bin), "few messages but 5+ tool calls still counts");
+});
+
+test("session-start stays quiet inside the background close-out (every hook shares the guard in sl_preflight)", async () => {
+  assert.equal((await run("session-start.sh", { cwd: repo() }, { SESSION_LINK_CLOSEOUT: "1", CLAUDE_PLUGIN_OPTION_AUTO_SELF_NOTES: "true" })).out, "");
+});
+
+test("session-start removes close-out copies older than two days", async () => {
+  mkdirSync(data("closeout"), { recursive: true });
+  writeFileSync(data("closeout", "old.txt"), "x");
+  writeFileSync(data("closeout", "new.txt"), "x");
+  execFileSync("touch", ["-t", "202001010000", data("closeout", "old.txt")]);
+  await run("session-start.sh", { cwd: repo() });
+  assert.ok(!existsSync(data("closeout", "old.txt")));
+  assert.ok(existsSync(data("closeout", "new.txt")));
+});
+
 test("hooks finish quickly", async () => {
   const r = await run("session-start.sh", { cwd: repo() });
   assert.ok(r.ms < 2000, `took ${r.ms}ms`);
+  const { transcript, env } = closeoutSetup({ turns: 2000 });
+  const e = await run("session-end.sh", { cwd: repo(), transcript_path: transcript }, env);
+  assert.ok(e.ms < 3000, `session-end took ${e.ms}ms`);
 });
