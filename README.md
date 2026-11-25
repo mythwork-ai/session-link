@@ -14,7 +14,7 @@ session-link links a small team's Claude Code sessions through one shared ledger
 
 **Reading.** At session start, a hook tells Claude to call `read_feed` for the current repo. Claude then mentions any teammate working on the same files. `read_feed` returns recent updates plus a map of which paths each teammate is changing. A hook caches that map, and before Claude edits a file on it, another hook adds a one-time warning.
 
-**Writing, only with your yes.** Nothing is shared unless you agree, either each time or once in settings. After a major milestone (a commit or PR, a decision, a blocker, finishing a task, starting work others might collide with), Claude asks in one line, "Share status with team?", with a one-sentence draft, and calls `post_update` only if you say yes. The Stop hook spots new commits and hands Claude the repo, branch and paths for the draft; Claude spots the other milestones itself. It won't ask twice about the same commit, and asks at most every 10 minutes (`SESSION_LINK_ASK_MIN`; `0` turns the commit ask off, and auto-posting with it). If you'd rather not be asked about commits, turn on the `auto_post_updates` plugin setting (off by default): Claude then posts the commit update without asking, on the same schedule, and tells you in one line what it posted. You review it after it's posted, not before, and can remove it with `delete_my_update`. Other milestones, handoffs and knowledge notes still ask.
+**Writing, only with your yes.** Nothing is shared unless you agree, either each time or once in settings. After a major milestone (a commit or PR, a decision, a blocker, finishing a task, starting work others might collide with), Claude asks in one line, "Share status with team?", with a draft, and calls `post_update` only if you say yes. The draft has a one-line summary that starts with the repo or component, and details as long as a teammate needs (up to 1,000 characters): which repos and components it affects and which it doesn't, why, what's next, and risks. The Stop hook spots new commits and hands Claude the repo, branch and paths for the draft; Claude spots the other milestones itself. It won't ask twice about the same commit, and asks at most every 10 minutes (`SESSION_LINK_ASK_MIN`; `0` turns the commit ask off, and auto-posting with it). If you'd rather not be asked about commits, turn on the `auto_post_updates` plugin setting (off by default): Claude then posts the commit update without asking, on the same schedule, and tells you in one line what it posted. You review it after it's posted, not before, and can remove it with `delete_my_update`. Other milestones, handoffs and knowledge notes still ask.
 
 **Presence, if you turn it on.** With the `share_presence` plugin setting on (it's off by default), Claude shares which branch and files you're editing in team repos, without asking each time and without any summary. Like **Auto-post status updates**, it shares without a per-post yes only because you opted in once. Teammates' edit warnings then cover work you haven't committed or announced yet. The row expires about 4 hours after your last edit.
 
@@ -80,7 +80,7 @@ You're prototyping something you may throw away. Claude commits and asks "Share 
 
 Sam is halfway through the auth refactor and has to switch to something urgent.
 
-1. He tells his Claude "hand this off to Alex". Claude drafts a handoff note from the session, the commits and the diff. The note has fixed sections: Goal, Done, Remaining, Decisions and why, Gotchas, How to test, Branch/PR, Key files. Claude then asks:
+1. He tells his Claude "hand this off to Alex". Claude drafts a handoff note from the session, the commits and the diff. The note has fixed sections: Goal, Scope (repos and components it affects, and which it doesn't), Done, Remaining, Decisions and why, Gotchas, How to test, Branch/PR, Key files. Claude then asks:
    > Hand this off to Alex? "Auth refactor: cookie migration half done"
 2. Sam reads it, fixes anything wrong, and says yes. Claude calls `create_handoff(to: "alex", …)` with the note, the repo, the branch `auth-refactor` and the key paths. The note is private to the two of you.
 3. Your next session in any repo calls `read_feed`, which lists it under "handed to you". Claude says:
@@ -122,7 +122,7 @@ On yes, Claude appends it with `gh pr edit`. The reviewer gets the decisions beh
 
 ### Picking up where you left off
 
-You stop on Friday halfway through a refactor. Claude asks "Save where you left off?" and you say yes. It calls `create_handoff` with `to: "me"` and a short note: Goal, Done, Next step, Open questions, Branch. On Monday your first session in that repo offers to load it. It also shows on `/feed` under "Where you left off" until you mark it picked up, and expires after 14 days.
+You stop on Friday halfway through a refactor. Claude asks "Save where you left off?" and you say yes. It calls `create_handoff` with `to: "me"` and a short note: Goal, Scope, Done, Next step, Open questions, Branch. On Monday your first session in that repo offers to load it. It also shows on `/feed` under "Where you left off" until you mark it picked up, and expires after 14 days.
 
 ### Catching up after a day off
 
@@ -130,7 +130,7 @@ Ask Claude "what has the team been up to in the last two days?". It calls `read_
 
 ## What gets recorded, and what never does
 
-The ledger records only what you agreed to share: a kind, a one-sentence summary, and optionally the repo, branch, repo-relative paths and links. With presence on, it also records your repo, branch and changed paths, with no summary. If the optional webhook is on, it also records PRs and branch pushes by people on the roster. It never records transcripts, prompts or file contents, because there is no field for them. Posts that look like they contain a secret are rejected.
+The ledger records only what you agreed to share: a kind, a one-line summary, and optionally details (up to 1,000 characters), the repo, branch, repo-relative paths and links. With presence on, it also records your repo, branch and changed paths, with no summary. If the optional webhook is on, it also records PRs and branch pushes by people on the roster. It never records transcripts, prompts or file contents, because there is no field for them. Posts that look like they contain a secret are rejected.
 
 Nothing is recorded from repos outside your instance's allowlist (the repos you gave setup, e.g. `github.com/acme/*`). The hooks check it on your machine, and the server checks it again.
 

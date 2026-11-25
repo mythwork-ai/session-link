@@ -80,6 +80,24 @@ describe("MCP tools", () => {
     expect(await E.LEDGER_DB.prepare("SELECT COUNT(*) AS n FROM updates").first("n")).toBe(0);
   });
 
+  it("post_update stores scrubbed details, returns them in read_feed, and rejects long or secret-looking details", async () => {
+    await author("erin");
+    await author("pat");
+    const erin = await client("erin");
+    const details = "## Scope\nsession-link worker only; the plugin is unaffected.\r\n<b>Next</b>: wire /me.";
+    const ok = await erin("post_update", { kind: "progress", summary: "session-link worker: details field", details, repo_url: REPO });
+    expect(ok.isError).toBe(false);
+    const row = (await (await client("pat"))("read_feed", { repo_url: REPO })).data.rows[0];
+    expect(row.details).toBe("## Scope\nsession-link worker only; the plugin is unaffected.\n‹b›Next‹/b›: wire /me.");
+    await erin("post_update", { kind: "status", summary: "no details", details: "  \n " });
+    expect(await E.LEDGER_DB.prepare("SELECT details FROM updates WHERE summary = 'no details'").first("details")).toBeNull();
+    expect((await erin("post_update", { kind: "status", summary: "too long", details: "x".repeat(1001) })).text).toMatch(/details is 1001 characters; keep it to 1000/);
+    expect((await erin("post_update", { kind: "status", summary: "leaky", details: "set API_KEY=abcdef123456" })).text).toMatch(/the details looks like it contains/);
+    expect((await erin("post_update", { kind: "status", summary: "set API_KEY=abcdef123456", details: "x".repeat(1001) })).text).toMatch(/the summary looks like it contains/);
+    expect(await E.LEDGER_DB.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'redaction_reject'").first("n")).toBe(2);
+    expect(await E.LEDGER_DB.prepare("SELECT COUNT(*) AS n FROM updates").first("n")).toBe(2);
+  });
+
   it("post_update is idempotent on client_id and supersedes only your own rows", async () => {
     await author("erin");
     await author("pat");

@@ -28,7 +28,7 @@
     "auto_post_updates": {
       "type": "boolean",
       "title": "Auto-post status updates",
-      "description": "After each new commit in a team repo, let Claude post a one-sentence status update without asking \"Share status with team?\" (at most every 10 minutes; each replaces your session's previous one). It tells you what it posted. Other milestones, handoffs and knowledge notes still ask. Off by default.",
+      "description": "After each new commit in a team repo, let Claude post a status update (a one-line summary plus details on scope and why) without asking \"Share status with team?\" (at most every 10 minutes; each replaces your session's previous one). It tells you what it posted. Other milestones, handoffs and knowledge notes still ask. Off by default.",
       "default": false,
       "required": false
     },

@@ -16,6 +16,7 @@ export type Kind = keyof typeof TTL_MS;
 export const INTENT_KINDS = ["status", "progress", "blocker", "decision", "ask"] as const;
 
 export const SUMMARY_MAX = 200;
+export const DETAILS_MAX = 1000;
 export const PATHS_MAX = 50;
 export const PATH_LEN_MAX = 200;
 export const BRANCH_MAX = 100;

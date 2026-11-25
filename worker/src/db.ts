@@ -10,6 +10,7 @@ export interface UpdateRow {
   branch: string | null;
   session_id: string | null;
   summary: string | null;
+  details: string | null;
   paths: string;
   links: string;
   client_id: string;
@@ -40,6 +41,7 @@ export interface NewUpdate {
   branch?: string | null;
   session_id?: string | null;
   summary?: string | null;
+  details?: string | null;
   paths?: string[];
   links?: string[];
   client_id: string;
@@ -57,10 +59,10 @@ export async function upsertUpdate(env: Env, u: NewUpdate, now: number): Promise
   const ttl = TTL_MS[u.kind];
   const at = Math.min(u.at ?? now, now);
   const row = await env.LEDGER_DB.prepare(
-    `INSERT INTO updates (id, author_id, kind, source, repo, branch, session_id, summary, paths, links, client_id, supersedes, created_at, updated_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?14)
+    `INSERT INTO updates (id, author_id, kind, source, repo, branch, session_id, summary, paths, links, client_id, supersedes, created_at, updated_at, expires_at, details)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?14, ?15)
      ON CONFLICT(author_id, client_id) DO UPDATE SET
-       kind = excluded.kind, repo = excluded.repo, branch = excluded.branch, summary = excluded.summary,
+       kind = excluded.kind, repo = excluded.repo, branch = excluded.branch, summary = excluded.summary, details = excluded.details,
        paths = excluded.paths, links = excluded.links, supersedes = excluded.supersedes,
        updated_at = excluded.updated_at, expires_at = excluded.expires_at
      WHERE excluded.updated_at >= updates.updated_at
@@ -81,6 +83,7 @@ export async function upsertUpdate(env: Env, u: NewUpdate, now: number): Promise
       u.supersedes ?? null,
       at,
       ttl === null ? null : at + ttl,
+      u.details ?? null,
     )
     .first<{ id: string }>();
   return row?.id ?? null; // null: a newer row already exists for this key
