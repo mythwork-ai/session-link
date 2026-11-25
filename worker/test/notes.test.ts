@@ -6,7 +6,7 @@ import worker from "../src/index";
 import { purge } from "../src/jobs/daily";
 import { buildServer } from "../src/mcp/server";
 import { sessionCookie } from "../src/web/session";
-import { ADMIN, E, REPO, author, call } from "./helpers";
+import { ADMIN, E, REPO, author, call, post } from "./helpers";
 
 async function client(login: string) {
   const [a, b] = InMemoryTransport.createLinkedPair();
@@ -303,5 +303,55 @@ describe("pages", () => {
     await author("pat");
     const h = await (await client("sam"))("create_handoff", { to: "alex", title: "Private", body: HANDOFF_BODY, repo_url: REPO });
     expect((await page(`/notes/${h.data.handed_off}`, "pat")).status).toBe(404);
+  });
+
+  it("/me lists notes to self, handoffs both ways with status, knowledge and posts; nobody else's", async () => {
+    await author("sam", "Sam");
+    await author("alex", "Alex");
+    await author("pat", "Pat");
+    const sam = await client("sam");
+    const alex = await client("alex");
+    const self = await sam("create_handoff", { to: "me", title: "Where I left off", body: HANDOFF_BODY, repo_url: REPO, client_id: "self-1" });
+    const sent = await sam("create_handoff", { to: "alex", title: "Cookie migration", body: HANDOFF_BODY, repo_url: REPO, branch: "auth-refactor" });
+    await alex("create_handoff", { to: "sam", title: "Retry metrics", body: HANDOFF_BODY, repo_url: REPO });
+    await alex("create_handoff", { to: "pat", title: "Not for Sam", body: HANDOFF_BODY, repo_url: REPO });
+    await sam("save_knowledge", { title: "Billing webhook retries", body: KNOWLEDGE_BODY });
+    await alex("save_knowledge", { title: "Alex's knowledge", body: KNOWLEDGE_BODY });
+    await alex("accept_handoff", { id: sent.data.handed_off });
+    expect((await sam("accept_handoff", { id: self.data.saved_for_later })).isError).toBe(false);
+    await post("sam", { summary: "Started the <b>auth</b> refactor" });
+    await post("sam", { kind: "heartbeat", summary: "presence row" });
+
+    const me = await page("/me", "sam");
+    expect(me.status).toBe(200);
+    expect(me.body).toContain('aria-current="page"');
+    expect(me.body).toContain("Where I left off");
+    expect(me.body).toContain('<span class="chip done">picked up</span>');
+    expect(me.body).toContain("Alex: Retry metrics");
+    expect(me.body).toContain("To Alex: Cookie migration");
+    expect(me.body).toContain("Alex took it on");
+    expect(me.body).toContain("Billing webhook retries");
+    expect(me.body).toContain("Started the &#60;b&#62;auth&#60;/b&#62; refactor");
+    expect(me.body).not.toContain("presence row");
+    expect(me.body).not.toContain("Not for Sam");
+    expect(me.body).not.toContain("Alex&#39;s knowledge");
+    expect(me.body).not.toContain("Alex's knowledge");
+
+    const empty = await page("/me", "pat");
+    expect(empty.body).toContain("You haven't handed anything off.");
+    expect(empty.body).toContain("Alex: Not for Sam");
+
+    const tool = (await sam("my_notes", {})).data;
+    expect(tool.notes_to_self).toEqual([expect.objectContaining({ title: "Where I left off", status: "accepted", self: true })]);
+    expect(tool.handed_to_you).toEqual([expect.objectContaining({ title: "Retry metrics", from: "Alex", status: "open" })]);
+    expect(tool.you_handed_off).toEqual([expect.objectContaining({ title: "Cookie migration", to_name: "Alex", status: "accepted" })]);
+    expect(tool.knowledge.map((n: { title: string }) => n.title)).toEqual(["Billing webhook retries"]);
+    expect(tool.posts.map((r: { summary: string }) => r.summary)).toEqual(["Started the <b>auth</b> refactor"]);
+  });
+
+  it("/me needs a session and sign-in returns there", async () => {
+    const r = await worker.fetch(new Request("https://sl.test/me"), E, createExecutionContext());
+    expect(r.status).toBe(401);
+    expect(await r.text()).toContain("/login?next=%2Fme");
   });
 });
