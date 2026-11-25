@@ -1,5 +1,5 @@
 {
-  "description": "session-link: nudges Claude to read and post team status through the connector, warns before editing a file a teammate is changing, points at team knowledge, shares presence when the user opted in, and offers team context for new PRs",
+  "description": "session-link: nudges Claude to read and post team status through the connector, warns before editing a file a teammate is changing, points at team knowledge, shares presence when the user opted in, offers team context for new PRs, and closes out sessions on exit when the user opted in",
   "hooks": {
     "SessionStart": [
       { "matcher": "startup|resume|clear|compact", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"", "timeout": 5 }] }
@@ -10,6 +10,9 @@
     ],
     "PreToolUse": [
       { "matcher": "Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/pre-tool-use.sh\"", "timeout": 3 }] }
+    ],
+    "SessionEnd": [
+      { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.sh\"", "timeout": 10 }] }
     ],
     "Stop": [
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/stop.sh\"", "timeout": 5 }] }

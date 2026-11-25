@@ -5,7 +5,7 @@ session-link links a small team's Claude Code sessions through one shared ledger
 | Part | What it is |
 |---|---|
 | `worker/` | A Cloudflare Worker with a D1 database. It serves the MCP connector (`/mcp`, GitHub sign-in), the `/feed` page, the admin API, and an optional GitHub webhook (`/v1/gh`). |
-| `plugin/session-link/` | The Claude Code plugin. It bundles the connector (`.mcp.json`) and five hooks that make no network calls. They prompt Claude to read and post, warn before Claude edits a file a teammate is changing, point at team knowledge about that file, and offer team context for new PRs. |
+| `plugin/session-link/` | The Claude Code plugin. It bundles the connector (`.mcp.json`) and six hooks that make no network calls. They prompt Claude to read and post, warn before Claude edits a file a teammate is changing, point at team knowledge about that file, and offer team context for new PRs. |
 | `scripts/` | `backfill.mjs` (seeds 7 days of GitHub activity, if the webhook is in use), `trial-report.sql` (the two-week keep-or-delete review) and `outcomes.mjs` (PR review and merge times before and during the trial). |
 
 **Setting it up for your org?** See [Run it for your org](#run-it-for-your-org). **Joining an existing instance?** See [Joining an instance](#joining-an-instance-each-person-about-two-minutes). **Want the why?** Read [`docs/overview.md`](docs/overview.md).
@@ -124,6 +124,8 @@ On yes, Claude appends it with `gh pr edit`. The reviewer gets the decisions beh
 
 You stop on Friday halfway through a refactor. Claude asks "Save where you left off?" and you say yes. It calls `create_handoff` with `to: "me"` and a short note: Goal, Scope, Done, Next step, Open questions, Branch. On Monday your first session in that repo offers to load it. It also shows on `/feed` under "Where you left off" until you mark it picked up, and expires after 14 days.
 
+If you'd rather not be asked, turn on the `auto_closeout` plugin setting (off by default). When a session in a team repo ends (on `/exit` or closing it, not `/clear`), a hook writes a condensed copy of the session (your messages, Claude's replies and one line per tool call; the start and the last part of a long session) to `~/.session-link/closeout/` and starts a background Claude on your account. That Claude has no file, shell or web tools, only `read_feed` and `create_handoff`. If the work stopped mid-task, it saves the note to self for you. With `auto_post_updates` also on, it can also post the one commit update the Stop hook never got to: a commit made after its last ask. It never posts a commit you declined, and `SESSION_LINK_ASK_MIN=0` turns this off too. It skips sessions with fewer than three of your messages and fewer than five tool calls. The copy and the background run's `.log` are deleted at your first session start two days later; a failed run is noted in `~/.session-link/hook.log`.
+
 ### Catching up after a day off
 
 Ask Claude "what has the team been up to in the last two days?". It calls `read_feed(since_hours=48)`, or up to 168 for a week, and summarizes. Or open `/feed` in a browser.
@@ -204,7 +206,7 @@ npm run setup -- --name acme-link --host session-link.acme.com --allowlist "gith
 }
 ```
 
-Members need read access to the marketplace repo; making it public removes that step. Leave `share_presence`, `auto_post_updates` and `auto_self_notes` out of the managed options so each person chooses them.
+Members need read access to the marketplace repo; making it public removes that step. Leave `share_presence`, `auto_post_updates`, `auto_self_notes` and `auto_closeout` out of the managed options so each person chooses them.
 
 **3. Add people** at `https://<your instance>/admin`.
 
