@@ -4,7 +4,7 @@ import { ensureAuthor, githubAuthorizeUrl, signInWithGithub } from "../auth/gith
 import { canManage, getRole, requireRole } from "../auth/roles";
 import { HttpError, json } from "../http";
 import { feedRows } from "../mcp/server";
-import { acceptHandoff, getNote, handoffsFor, myNotes, recentKnowledge, searchKnowledge, type NoteRow } from "../notes";
+import { POSTS_MAX, acceptHandoff, getNote, handoffsFor, myNotes, recentKnowledge, searchKnowledge, type NoteMeta, type NoteRow } from "../notes";
 import { isAllowed, loadAllowlist } from "../safety/allowlist";
 import { escapeHtml, readSession, sessionCookie } from "../web/session";
 import { ICON_GITHUB, initial, render, renderNoteBody, statePage, type Viewer } from "../web/ui";
@@ -161,7 +161,7 @@ ${cards ? `<div class="notes">${cards}</div>` : `<p class="calm">${knowledgeEmpt
 }
 
 /** One linked row for a note on /me: title, repo and branch, a status chip, and age. */
-function noteRow(n: NoteRow, now: number, title: string, chip: [label: string, open: boolean] | null): string {
+function noteRow(n: NoteMeta, now: number, title: string, chip: [label: string, open: boolean] | null): string {
   const done = chip !== null && !chip[1];
   return `<li${done ? ' class="done"' : ""}><a class="row" href="/notes/${escapeHtml(n.id)}"><span class="grow"><span class="title" style="font-weight:600">${escapeHtml(title)}</span>
 <span class="mono muted">${escapeHtml(n.repo ?? "team")}${n.branch ? ` · ${escapeHtml(n.branch)}` : ""}</span></span>${chip ? `<span class="chip ${chip[1] ? "open" : "done"}">${escapeHtml(chip[0])}</span>` : ""}<span class="muted small">${ago(now, n.updated_at)}</span></a></li>`;
@@ -169,18 +169,22 @@ function noteRow(n: NoteRow, now: number, title: string, chip: [label: string, o
 
 async function mePage(env: Env, viewer: Viewer, now: number): Promise<Response> {
   const m = await myNotes(env, viewer.login, now);
-  const posts = (await feedRows(env, now, { author: viewer.login, sinceHours: 168, limit: 50 })).filter((r) => r.kind !== "heartbeat");
-  const open = (n: NoteRow) => n.status === "open";
-  const sections: { id: string; name: string; hint: string; empty: string; items: string[] }[] = [
+  const recent = await feedRows(env, now, { author: viewer.login, notKind: "heartbeat", sinceHours: 168, limit: POSTS_MAX + 1 });
+  const posts = recent.slice(0, POSTS_MAX);
+  // A footer whenever a list holds back items, so a capped list never reads as complete.
+  const capNote = (shown: number, total: number) => (total > shown ? `Showing ${shown} of ${total}.` : "");
+  const open = (n: NoteMeta) => n.status === "open";
+  const sections: { id: string; name: string; hint: string; empty: string; items: string[]; count: string; footer: string }[] = [
     { id: "left-off", name: "Notes to yourself", hint: "expire 14 days after you save or pick them up", empty: "No notes to yourself. Claude offers to save one when you stop mid-task.",
-      items: m.self.map((n) => noteRow(n, now, n.title, open(n) ? ["open", true] : ["picked up", false])) },
+      count: String(m.self.total), footer: capNote(m.self.items.length, m.self.total), items: m.self.items.map((n) => noteRow(n, now, n.title, open(n) ? ["open", true] : ["picked up", false])) },
     { id: "to-you", name: "Handed to you", hint: "open 30 days · kept 14 days after you take it on", empty: "Nobody has handed you anything.",
-      items: m.toYou.map((n) => noteRow(n, now, `${n.display_name}: ${n.title}`, open(n) ? ["open", true] : ["you took it on", false])) },
+      count: String(m.toYou.total), footer: capNote(m.toYou.items.length, m.toYou.total), items: m.toYou.items.map((n) => noteRow(n, now, `${n.display_name}: ${n.title}`, open(n) ? ["open", true] : ["you took it on", false])) },
     { id: "from-you", name: "You handed off", hint: "see whether they've picked it up", empty: "You haven't handed anything off.",
-      items: m.fromYou.map((n) => { const to = n.to_name ?? n.to_author ?? ""; return noteRow(n, now, `To ${to}: ${n.title}`, open(n) ? ["waiting", true] : [`${to} took it on`, false]); }) },
+      count: String(m.fromYou.total), footer: capNote(m.fromYou.items.length, m.fromYou.total), items: m.fromYou.items.map((n) => { const to = n.to_name ?? n.to_author ?? ""; return noteRow(n, now, `To ${to}: ${n.title}`, open(n) ? ["waiting", true] : [`${to} took it on`, false]); }) },
     { id: "knowledge", name: "Your knowledge notes", hint: "team-wide · never expire", empty: "You haven't saved any knowledge notes.",
-      items: m.knowledge.map((n) => noteRow(n, now, n.title, null)) },
+      count: String(m.knowledge.total), footer: capNote(m.knowledge.items.length, m.knowledge.total), items: m.knowledge.items.map((n) => noteRow(n, now, n.title, null)) },
     { id: "posts", name: "Your posts", hint: "last 7 days · status posts expire after 2 days, decisions never", empty: "Nothing posted in the last 7 days.",
+      count: recent.length > POSTS_MAX ? `${POSTS_MAX}+` : String(posts.length), footer: recent.length > POSTS_MAX ? `Showing the latest ${POSTS_MAX}.` : "",
       items: posts.map((r) => `<li><div class="row"><span class="grow"><span class="small">${escapeHtml(r.summary ?? `${r.branch ? `${r.branch} · ` : ""}${r.paths.length} file${r.paths.length === 1 ? "" : "s"}`)}</span>
 <span class="tiny muted">${age(r.age_s)} · ${escapeHtml(r.kind)}${r.repo ? ` · ${escapeHtml(r.repo)}` : ""}${r.branch ? ` · ${escapeHtml(r.branch)}` : ""}</span></span></div></li>`) },
   ];
@@ -191,11 +195,11 @@ async function mePage(env: Env, viewer: Viewer, now: number): Promise<Response> 
     body: `<main style="max-width:900px">
 <div style="display:flex;flex-direction:column;gap:12px"><h1>Your notes</h1>
 <p class="calm">Everything you wrote or were handed, including what's already picked up. Notes to yourself are private to you. A handoff is private to you and the other person.</p>
-<nav class="jump" aria-label="Sections">${sections.map((s) => `<a href="#${s.id}">${s.name} <span class="n">${s.items.length}</span></a>`).join("")}</nav></div>
+<nav class="jump" aria-label="Sections">${sections.map((s) => `<a href="#${s.id}">${s.name} <span class="n">${s.count}</span></a>`).join("")}</nav></div>
 ${sections
   .map(
     (s) => `<section style="display:flex;flex-direction:column;gap:12px" aria-labelledby="${s.id}"><div class="head"><h2 id="${s.id}">${s.name}</h2><span class="muted small">${s.hint}</span></div>
-${s.items.length ? `<ul class="list card">${s.items.join("")}</ul>` : `<p class="calm">${s.empty}</p>`}</section>`,
+${s.items.length ? `<ul class="list card">${s.items.join("")}</ul>` : `<p class="calm">${s.empty}</p>`}${s.footer ? `<p class="calm small">${s.footer}</p>` : ""}</section>`,
   )
   .join("\n")}
 </main>`,

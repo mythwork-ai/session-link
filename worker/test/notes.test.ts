@@ -342,16 +342,43 @@ describe("pages", () => {
     expect(empty.body).toContain("Alex: Not for Sam");
 
     const tool = (await sam("my_notes", {})).data;
-    expect(tool.notes_to_self).toEqual([expect.objectContaining({ title: "Where I left off", status: "accepted", self: true })]);
-    expect(tool.handed_to_you).toEqual([expect.objectContaining({ title: "Retry metrics", from: "Alex", status: "open" })]);
-    expect(tool.you_handed_off).toEqual([expect.objectContaining({ title: "Cookie migration", to_name: "Alex", status: "accepted" })]);
-    expect(tool.knowledge.map((n: { title: string }) => n.title)).toEqual(["Billing webhook retries"]);
-    expect(tool.posts.map((r: { summary: string }) => r.summary)).toEqual(["Started the <b>auth</b> refactor"]);
+    expect(tool.notes_to_self.items).toEqual([expect.objectContaining({ title: "Where I left off", status: "accepted", self: true })]);
+    expect(tool.handed_to_you.items).toEqual([expect.objectContaining({ title: "Retry metrics", from: "Alex", status: "open" })]);
+    expect(tool.you_handed_off.items).toEqual([expect.objectContaining({ title: "Cookie migration", to_name: "Alex", status: "accepted" })]);
+    expect(tool.knowledge.items.map((n: { title: string }) => n.title)).toEqual(["Billing webhook retries"]);
+    expect(tool.posts.items.map((r: { summary: string }) => r.summary)).toEqual(["Started the <b>auth</b> refactor"]);
+    expect(tool.knowledge.not_shown).toBeUndefined();
   });
 
   it("/me needs a session and sign-in returns there", async () => {
     const r = await worker.fetch(new Request("https://sl.test/me"), E, createExecutionContext());
     expect(r.status).toBe(401);
     expect(await r.text()).toContain("/login?next=%2Fme");
+  });
+
+  it("/me and my_notes cap a list at 100 and say how many they left out", async () => {
+    await author("sam", "Sam");
+    const now = Date.now();
+    const insert = E.LEDGER_DB.prepare("INSERT INTO notes (id, author_id, kind, title, body, client_id, created_at, updated_at) VALUES (?, 'sam', 'knowledge', ?, 'A body long enough to count.', ?, ?, ?)");
+    await E.LEDGER_DB.batch(Array.from({ length: 102 }, (_, i) => insert.bind(crypto.randomUUID(), `Note ${i}`, `c${i}`, now + i, now + i)));
+    const body = (await page("/me", "sam")).body;
+    expect(body).toContain("Your knowledge notes <span class=\"n\">102</span>");
+    expect(body).toContain("Showing 100 of 102.");
+    const tool = (await (await client("sam"))("my_notes", {})).data;
+    expect(tool.knowledge.items).toHaveLength(100);
+    expect(tool.knowledge.not_shown).toBe(2);
+  });
+
+  it("posts on /me skip presence rows before the limit, and say when older posts exist", async () => {
+    await author("sam", "Sam");
+    for (let i = 0; i < 60; i++) await post("sam", { kind: "heartbeat", summary: null as unknown as string });
+    for (let i = 0; i < 51; i++) await post("sam", { summary: `post ${i}` });
+    const body = (await page("/me", "sam")).body;
+    expect(body).toContain('Your posts <span class="n">50+</span>');
+    expect(body).toContain("Showing the latest 50.");
+    const tool = (await (await client("sam"))("my_notes", {})).data;
+    expect(tool.posts.items).toHaveLength(50);
+    expect(tool.posts.items.every((r: { kind: string }) => r.kind !== "heartbeat")).toBe(true);
+    expect(tool.posts.more).toBe(true);
   });
 });
