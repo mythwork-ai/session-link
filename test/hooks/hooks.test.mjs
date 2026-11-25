@@ -465,6 +465,30 @@ test("after gh pr create succeeds, post-bash asks Claude to offer pr_context, as
   assert.match(ctx(r), /only on yes/);
 });
 
+test("post-bash reads the branch where gh ran: cds into a linked worktree, or an explicit --head", async () => {
+  const main = repo();
+  const parent = mkdtempSync(join(tmpdir(), "sl-wt-"));
+  const wt = join(parent, "app-feat");
+  git(main, "worktree", "add", "-qb", "feat/wt", wt);
+  const branchIn = async (command, cwd = main) => /and branch "([^"]+)"/.exec(ctx(await bash(cwd, command, PR)))?.[1] ?? "silent";
+  assert.equal(await branchIn(`cd ${wt} && git push -u origin HEAD && gh pr create --draft --title x`), "feat/wt", "absolute cd");
+  assert.equal(await branchIn(`cd "${wt}"; gh pr create --title x`), "feat/wt", "quoted cd after ;");
+  assert.equal(await branchIn("cd app-feat && gh pr create --title x", parent), "feat/wt", "relative cd from outside any repo");
+  const spaced = join(parent, "abcd efg");
+  git(main, "worktree", "add", "-qb", "feat/space", spaced);
+  assert.equal(await branchIn(`cd "${spaced}" && gh pr create --title x`), "feat/space", "a quoted path containing 'cd '");
+  assert.equal(await branchIn(`cd ${parent} && cd app-feat && gh pr create --title x`), "feat/wt", "chained cds resolve in order");
+  assert.equal(await branchIn(`gh pr create --title x\ncd ${wt}`), "main", "a cd after the create, even on a later line, is ignored");
+  assert.equal(await branchIn("gh pr create --head feat/other --title x"), "feat/other", "--head wins");
+  assert.equal(await branchIn('gh pr create -H "feat/q" --title x'), "feat/q", "quoted -H");
+  assert.equal(await branchIn("gh pr create --head=octo:feat/fork --title x"), "feat/fork", "owner:branch keeps the branch");
+  assert.equal(await branchIn('gh pr create --title "fix curl -H header" --body "see --head docs"'), "main", "flags inside quoted text are not flags");
+  assert.equal(await branchIn("curl -H foo https://x && gh pr create --title x"), "main", "another command's -H is not gh's");
+  assert.equal(await branchIn(`gh pr create --head ${"b".repeat(101)} --title x`), "silent", "a branch the server would reject");
+  assert.equal(await branchIn("cd /does/not/exist && gh pr create --title x"), "silent", "a missing dir: unknown branch, so silent");
+  assert.equal(await branchIn('cd "$WT" && gh pr create --title x'), "silent", "a variable: unknown branch, so silent");
+});
+
 test("post-bash is silent for other commands, failed creates, and other repos", async () => {
   const dir = repo();
   git(dir, "checkout", "-qb", "feat/x");
