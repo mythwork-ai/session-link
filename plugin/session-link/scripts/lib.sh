@@ -21,6 +21,9 @@ sl_log() {
   printf '%s [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SL_HOOK:-?}" "$*" >>"$f"
 }
 
+# True when a boolean plugin option ($1) is on: true, 1 or yes, in any case.
+sl_opt_on() { case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in true | 1 | yes) return 0 ;; esac; return 1; }
+
 # Reads the hook's stdin JSON once into SL_INPUT.
 sl_read_input() { SL_INPUT="$(cat)"; }
 sl_field() { printf '%s' "$SL_INPUT" | jq -r "$1 // empty" 2>/dev/null; }

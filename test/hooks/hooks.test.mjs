@@ -115,6 +115,7 @@ const commit = (dir, file, msg = "work") => {
   git(dir, "add", "-A");
   git(dir, "commit", "-qm", msg);
 };
+const AUTO = { CLAUDE_PLUGIN_OPTION_AUTO_POST_UPDATES: "true" };
 // A session that started on this repo: SessionStart writes the commit baseline.
 const started = async (dir, session = "sess1") => run("session-start.sh", { cwd: dir, session_id: session });
 
@@ -135,6 +136,47 @@ test("after a new commit, stop asks Claude to offer a team update and post only 
   assert.equal(a.branch, "auth-refactor");
   assert.equal(a.client_id, "session-sess1");
   assert.deepEqual([...a.paths].sort(), ["src/auth/committed.ts", "src/auth/session.ts"]);
+});
+
+test("with auto_post_updates on, stop tells Claude to post without asking and say what it posted", async () => {
+  const dir = repo();
+  git(dir, "checkout", "-qb", "auth-refactor");
+  await started(dir);
+  commit(dir, "src/auth/committed.ts");
+  const r = await run("stop.sh", { cwd: dir }, AUTO);
+  assert.match(ctx(r), /turned on auto-posting, so do not ask/);
+  assert.doesNotMatch(ctx(r), /Share status with team/);
+  assert.match(ctx(r), /tell the user in one short line what you posted/);
+  const a = JSON.parse(ctx(r).match(/these arguments: (\{.*\})\. Then tell/)[1]);
+  assert.equal(a.repo_url, REPO);
+  assert.equal(a.branch, "auth-refactor");
+  assert.equal(a.client_id, "session-sess1");
+  assert.deepEqual(a.paths, ["src/auth/committed.ts"]);
+  commit(dir, "b.ts");
+  assert.equal((await run("stop.sh", { cwd: dir }, AUTO)).out, "", "the interval still applies");
+});
+
+test("auto-posting accepts true, 1 or yes; anything else keeps the ask", async () => {
+  for (const [v, auto] of [["TRUE", true], ["1", true], ["yes", true], ["false", false], ["", false]]) {
+    const dir = repo();
+    const s = `s${v || "empty"}`;
+    await started(dir, s);
+    commit(dir, "a.ts");
+    const text = ctx(await run("stop.sh", { cwd: dir, session_id: s }, { CLAUDE_PLUGIN_OPTION_AUTO_POST_UPDATES: v }));
+    assert.equal(/so do not ask/.test(text), auto, v);
+  }
+});
+
+test("session-start adds nothing for auto-posting, which only the Stop hook's commit path uses", async () => {
+  assert.doesNotMatch(ctx(await run("session-start.sh", { cwd: repo() }, AUTO)), /auto-posting/);
+});
+
+test("session-start mentions automatic notes to self only when they're on", async () => {
+  assert.doesNotMatch(ctx(await run("session-start.sh", { cwd: repo() })), /notes to self/);
+  const text = ctx(await run("session-start.sh", { cwd: repo() }, { CLAUDE_PLUGIN_OPTION_AUTO_SELF_NOTES: "true" }));
+  assert.match(text, /turned on automatic notes to self/);
+  assert.match(text, /create_handoff to "me" and client_id "self-sess1"/);
+  assert.doesNotMatch(text, /auto-posting/, "the two settings are independent");
 });
 
 test("uncommitted edits alone never trigger an ask", async () => {

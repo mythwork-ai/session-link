@@ -67,28 +67,26 @@ fi
 
 # Presence: only with the user's one-time consent in the plugin settings. The shared set is the
 # files edited in this session (state lines 3+), so no git diff runs on the edit path.
-case "$(printf '%s' "${CLAUDE_PLUGIN_OPTION_SHARE_PRESENCE:-}" | tr '[:upper:]' '[:lower:]')" in
-  true | 1 | yes)
-    state="$SL_DATA/state/presence-$SL_SESSION"
-    branch="$(sl_branch)"
-    key="$SL_REPO|$branch"
-    nowts="$(date +%s)"
-    prev=""
-    [ "$(head -1 "$state" 2>/dev/null)" = "$key" ] && prev="$(tail -n +3 "$state" 2>/dev/null)"
-    last="$(sed -n 2p "$state" 2>/dev/null)"; case "$last" in '' | *[!0-9]*) last=0 ;; esac
-    if [ -z "$prev" ] || [ $((nowts - last)) -ge 600 ] || ! printf '%s\n' "$prev" | grep -qxF -- "$rel"; then
-      okrel="$(printf '%s\n' "$rel" | grep -E '^[][A-Za-z0-9._/ @+()-]{1,200}$' | grep -vE '(^|/)\.\.(/|$)')"
-      files="$(printf '%s\n%s\n' "$prev" "$okrel" | grep . | sort -u)"
-      if [ -n "$files" ]; then
-        paths="$(printf '%s\n' "$files" | collapse)"
-        args="$(printf '%s\n' "$paths" | jq -R . | jq -sc --arg r "$SL_REPO" --arg b "$branch" '{repo_url: $r} + (if $b == "" then {} else {branch: $b} end) + {paths: .}')"
-        presence_state="$(printf '%s\n%s\n%s' "$key" "$nowts" "$files")"
-        commit="$commit presence"
-        add "session-link: presence sharing is on (the user opted in). Call the session-link set_presence tool with exactly these arguments: $args. Do not mention this to the user."
-      fi
+if sl_opt_on "${CLAUDE_PLUGIN_OPTION_SHARE_PRESENCE:-}"; then
+  state="$SL_DATA/state/presence-$SL_SESSION"
+  branch="$(sl_branch)"
+  key="$SL_REPO|$branch"
+  nowts="$(date +%s)"
+  prev=""
+  [ "$(head -1 "$state" 2>/dev/null)" = "$key" ] && prev="$(tail -n +3 "$state" 2>/dev/null)"
+  last="$(sed -n 2p "$state" 2>/dev/null)"; case "$last" in '' | *[!0-9]*) last=0 ;; esac
+  if [ -z "$prev" ] || [ $((nowts - last)) -ge 600 ] || ! printf '%s\n' "$prev" | grep -qxF -- "$rel"; then
+    okrel="$(printf '%s\n' "$rel" | grep -E '^[][A-Za-z0-9._/ @+()-]{1,200}$' | grep -vE '(^|/)\.\.(/|$)')"
+    files="$(printf '%s\n%s\n' "$prev" "$okrel" | grep . | sort -u)"
+    if [ -n "$files" ]; then
+      paths="$(printf '%s\n' "$files" | collapse)"
+      args="$(printf '%s\n' "$paths" | jq -R . | jq -sc --arg r "$SL_REPO" --arg b "$branch" '{repo_url: $r} + (if $b == "" then {} else {branch: $b} end) + {paths: .}')"
+      presence_state="$(printf '%s\n%s\n%s' "$key" "$nowts" "$files")"
+      commit="$commit presence"
+      add "session-link: presence sharing is on (the user opted in). Call the session-link set_presence tool with exactly these arguments: $args. Do not mention this to the user."
     fi
-    ;;
-esac
+  fi
+fi
 
 [ -n "$notes" ] || exit 0
 jq -n --arg t "$notes" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $t}}' || exit 0
