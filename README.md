@@ -209,16 +209,18 @@ Members need read access to the marketplace repo; making it public removes that 
 
 An admin adds your GitHub login at `/admin` first. Each Claude account you use signs in once, with the same GitHub account.
 
-1. If your org rolled it out through managed settings, skip to step 2. Otherwise install the plugin:
+1. If your org rolled it out through managed settings, skip to step 3. Otherwise add the marketplace and install the plugin **for your user**, not for one project:
    ```
    /plugin marketplace add mythwork-ai/session-link
-   /plugin install session-link@session-link
+   ! claude plugin install session-link@session-link --scope user
    ```
-   When asked, enter your team's server URL and repos. Your admin gives you both.
-2. Run `/mcp`, select the session-link **ledger** server, and sign in with GitHub.
-3. Run `/session-link:setup` to confirm the connection.
+2. Open `/plugin`, select session-link, and enter your team's server URL and repos in its settings. Your admin gives you both. Turn on **Share presence** here too if you want it.
+3. Start a new session, run `/mcp`, select the session-link **ledger** server, and sign in with GitHub.
+4. Run `/session-link:setup` to confirm the connection.
 
-You need `git` and `jq` installed. To use the connector in claude.ai or the desktop app without the hooks, add `https://<your instance>/mcp` as a connector there. Plugin updates arrive automatically with managed settings; otherwise run `/plugin marketplace update session-link` and then `/reload-plugins`.
+**Why user scope.** Claude Code reads a project-scope install only in the folder a session starts in, not in folders below it. A plugin installed from `~/code/acme` is missing from a session started in `~/code/acme/app`. It has no setting for "this folder and everything under it". A user-scope install loads everywhere, and the hooks still act only in repos on your team's allowlist: elsewhere they share nothing and say nothing. If you already installed at project scope, run `! claude plugin install session-link@session-link --scope user`, then `! claude plugin uninstall session-link@session-link --scope project` from the folder you installed it in. Your settings carry over, because Claude Code keeps plugin options in your user settings either way.
+
+You need `git` and `jq` installed. To use the connector in claude.ai or the desktop app without the hooks, add `https://<your instance>/mcp` as a connector there. Without the hooks nothing prompts Claude to read the feed, so ask it ("what's the team doing in agent-router?"). Plugin updates arrive automatically with managed settings; otherwise run `/plugin marketplace update session-link` and then `/reload-plugins`.
 
 ## Running it
 

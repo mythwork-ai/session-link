@@ -195,9 +195,10 @@ ${JSON.stringify(settings, null, 2)}
 
 Or each person, once:
   /plugin marketplace add ${marketplaceRepo()}
-  /plugin install session-link@session-link
-  (enter ${publicUrl} and ${allowlist.join(",")} when asked)
-  /mcp → session-link "ledger" → sign in with GitHub
+  ! claude plugin install session-link@session-link --scope user
+  /plugin → session-link → settings: ${publicUrl} and ${allowlist.join(",")} (and Share presence, if they want it)
+  new session, then /mcp → session-link "ledger" → sign in with GitHub
+  (user scope, not project: a project install doesn't reach repos in subfolders)
 `);
   rl.close();
 }

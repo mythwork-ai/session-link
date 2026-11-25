@@ -173,6 +173,14 @@ describe("review fixes", () => {
     expect((await s("save_knowledge", { title: "Replacement", body: KNOWLEDGE_BODY, supersedes: h.data.handed_off })).text).toMatch(/knowledge notes/);
   });
 
+  it("a handoff's page names the recipient by display name", async () => {
+    await author("sam", "Sam");
+    await author("alex", "Alex Kim");
+    const h = await (await client("sam"))("create_handoff", { to: "alex", title: "Work", body: HANDOFF_BODY, repo_url: REPO });
+    const html = (await page(`/notes/${h.data.handed_off}`, "sam")).body;
+    expect(html).toContain("From Sam to Alex Kim");
+  });
+
   it("signing in from a note link returns to that note", async () => {
     const id = crypto.randomUUID();
     const r = await worker.fetch(new Request(`https://sl.test/notes/${id}`, { redirect: "manual" }), E, createExecutionContext());
