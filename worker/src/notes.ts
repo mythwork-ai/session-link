@@ -111,9 +111,10 @@ export async function upsertNote(env: Env, n: NewNote, now: number): Promise<str
 
 const SELECT = `SELECT n.*, a.display_name FROM notes n JOIN authors a ON a.id = n.author_id`;
 // Knowledge outlives its author's access: revoking someone hides their handoffs, not what they taught the team.
-const LIVE = `(n.expires_at IS NULL OR n.expires_at > ?) AND (n.kind = 'knowledge' OR a.revoked_at IS NULL)`;
+const live = (p: string) => `(n.expires_at IS NULL OR n.expires_at > ${p}) AND (n.kind = 'knowledge' OR a.revoked_at IS NULL)`;
+const LIVE = live("?");
 
-async function visible<T extends NoteRow>(env: Env, rows: T[]): Promise<T[]> {
+async function visible<T extends { repo: string | null }>(env: Env, rows: T[]): Promise<T[]> {
   const allow = await loadAllowlist(env);
   return rows.filter((r) => r.repo === null || isAllowed(r.repo, allow));
 }
@@ -142,29 +143,50 @@ export async function handoffsFor(env: Env, login: string, now: number): Promise
   return visible(env, results);
 }
 
-export interface MyNotes {
-  self: NoteRow[];
-  toYou: NoteRow[];
-  fromYou: (NoteRow & { to_name: string | null })[];
-  knowledge: NoteRow[];
+/** Each /me list shows at most this many and reports how many it left out. */
+export const MY_LIST_MAX = 100;
+/** Posts on /me and in my_notes: the latest this many from the last 7 days. */
+export const POSTS_MAX = 50;
+
+export interface MyList<T> {
+  items: T[];
+  total: number;
 }
 
-/** Everything that concerns `login`, open items first within each handoff list: notes to self, handoffs both ways, their knowledge. */
+/** A note without its body: list views link to the note, so they never load bodies. */
+export type NoteMeta = Omit<NoteRow, "body"> & { to_name: string | null };
+
+export interface MyNotes {
+  self: MyList<NoteMeta>;
+  toYou: MyList<NoteMeta>;
+  fromYou: MyList<NoteMeta>;
+  knowledge: MyList<NoteMeta>;
+}
+
+const capped = <T,>(rows: T[]): MyList<T> => ({ items: rows.slice(0, MY_LIST_MAX), total: rows.length });
+
+/**
+ * Everything that concerns `login`, open items first within each handoff list: notes to self, handoffs both ways, their knowledge.
+ * No SQL LIMIT, so the allowlist filter sees every row and each list reports its true total. Handoffs expire within 30 days, but
+ * knowledge never does, so this read grows with the knowledge notes one person writes; it loads metadata only, never bodies.
+ */
 export async function myNotes(env: Env, login: string, now: number): Promise<MyNotes> {
   const { results } = await env.LEDGER_DB.prepare(
-    `SELECT n.*, a.display_name, t.display_name AS to_name FROM notes n JOIN authors a ON a.id = n.author_id LEFT JOIN authors t ON t.id = n.to_author
-     WHERE (n.author_id = ?1 OR n.to_author = ?1) AND ${LIVE.replace("?", "?2")}
-     ORDER BY n.status = 'open' DESC, n.updated_at DESC LIMIT 200`,
+    `SELECT n.id, n.author_id, n.kind, n.title, n.tags, n.repo, n.branch, n.paths, n.links, n.to_author, n.status, n.updated_at, n.expires_at,
+            a.display_name, t.display_name AS to_name
+     FROM notes n JOIN authors a ON a.id = n.author_id LEFT JOIN authors t ON t.id = n.to_author
+     WHERE (n.author_id = ?1 OR n.to_author = ?1) AND ${live("?2")}
+     ORDER BY n.status = 'open' DESC, n.updated_at DESC`,
   )
     .bind(login, now)
-    .all<NoteRow & { to_name: string | null }>();
+    .all<NoteMeta>();
   const rows = await visible(env, results);
   const handoff = rows.filter((n) => n.kind === "handoff");
   return {
-    self: handoff.filter((n) => n.author_id === login && n.to_author === login),
-    toYou: handoff.filter((n) => n.author_id !== login),
-    fromYou: handoff.filter((n) => n.author_id === login && n.to_author !== login),
-    knowledge: rows.filter((n) => n.kind === "knowledge" && n.author_id === login),
+    self: capped(handoff.filter((n) => n.author_id === login && n.to_author === login)),
+    toYou: capped(handoff.filter((n) => n.author_id !== login)),
+    fromYou: capped(handoff.filter((n) => n.author_id === login && n.to_author !== login)),
+    knowledge: capped(rows.filter((n) => n.kind === "knowledge" && n.author_id === login)),
   };
 }
 
@@ -234,7 +256,7 @@ export async function knowledgePaths(env: Env, repo: string, now: number): Promi
   return index;
 }
 
-export const summarize = (n: NoteRow, now: number) => ({
+export const summarize = (n: Omit<NoteRow, "body">, now: number) => ({
   id: n.id,
   kind: n.kind,
   title: n.title,

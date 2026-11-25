@@ -24,7 +24,7 @@ session-link links a small team's Claude Code sessions through one shared ledger
 
 **People** sign in with GitHub at `/feed` to see who is active and the last 48 hours of updates.
 
-**Your notes.** `/me` (the **Your notes** button in the header) lists everything that concerns you, open items first: notes to yourself, handoffs to you and from you with whether they were picked up, your knowledge notes, and your posts from the last 7 days. In a session, ask "show my handoffs" or "did Sam pick up my handoff?" and Claude calls `my_notes` for the same lists.
+**Your notes.** `/me` (the **Your notes** button in the header) lists your notes, open items first: notes to yourself, handoffs to you and from you with whether they were picked up, your knowledge notes, and your posts from the last 7 days. Each list shows up to 100 notes (the latest 50 posts) and says when it holds some back. In a session, ask "show my handoffs" or "did Sam pick up my handoff?" and Claude calls `my_notes` for the same lists.
 
 ## Using it day to day
 
