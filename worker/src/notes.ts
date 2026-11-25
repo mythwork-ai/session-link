@@ -113,7 +113,7 @@ const SELECT = `SELECT n.*, a.display_name FROM notes n JOIN authors a ON a.id =
 // Knowledge outlives its author's access: revoking someone hides their handoffs, not what they taught the team.
 const LIVE = `(n.expires_at IS NULL OR n.expires_at > ?) AND (n.kind = 'knowledge' OR a.revoked_at IS NULL)`;
 
-async function visible(env: Env, rows: NoteRow[]): Promise<NoteRow[]> {
+async function visible<T extends NoteRow>(env: Env, rows: T[]): Promise<T[]> {
   const allow = await loadAllowlist(env);
   return rows.filter((r) => r.repo === null || isAllowed(r.repo, allow));
 }
@@ -140,6 +140,32 @@ export async function handoffsFor(env: Env, login: string, now: number): Promise
     .bind(login, now)
     .all<NoteRow>();
   return visible(env, results);
+}
+
+export interface MyNotes {
+  self: NoteRow[];
+  toYou: NoteRow[];
+  fromYou: (NoteRow & { to_name: string | null })[];
+  knowledge: NoteRow[];
+}
+
+/** Everything that concerns `login`, open items first within each handoff list: notes to self, handoffs both ways, their knowledge. */
+export async function myNotes(env: Env, login: string, now: number): Promise<MyNotes> {
+  const { results } = await env.LEDGER_DB.prepare(
+    `SELECT n.*, a.display_name, t.display_name AS to_name FROM notes n JOIN authors a ON a.id = n.author_id LEFT JOIN authors t ON t.id = n.to_author
+     WHERE (n.author_id = ?1 OR n.to_author = ?1) AND ${LIVE.replace("?", "?2")}
+     ORDER BY n.status = 'open' DESC, n.updated_at DESC LIMIT 200`,
+  )
+    .bind(login, now)
+    .all<NoteRow & { to_name: string | null }>();
+  const rows = await visible(env, results);
+  const handoff = rows.filter((n) => n.kind === "handoff");
+  return {
+    self: handoff.filter((n) => n.author_id === login && n.to_author === login),
+    toYou: handoff.filter((n) => n.author_id !== login),
+    fromYou: handoff.filter((n) => n.author_id === login && n.to_author !== login),
+    knowledge: rows.filter((n) => n.kind === "knowledge" && n.author_id === login),
+  };
 }
 
 export async function recentKnowledge(env: Env, repo: string | null, now: number, limit: number): Promise<NoteRow[]> {

@@ -15,7 +15,7 @@ People read the same data in a browser.
 
 - **Server:** a Cloudflare Worker with a D1 (SQLite) database.
   - It serves an MCP connector at `/mcp`, protected by OAuth 2.1 (`@cloudflare/workers-oauth-provider`), with GitHub as the identity provider.
-  - It serves server-rendered pages (`/feed`, `/notes/<id>`, `/admin`) and an admin API (`/v1/admin/*`, admin token).
+  - It serves server-rendered pages (`/feed`, `/me`, `/notes/<id>`, `/admin`) and an admin API (`/v1/admin/*`, admin token).
   - An optional GitHub webhook lives at `/v1/gh`.
   - A daily cron writes a JSONL snapshot to R2, then purges expired rows.
 - **Client:** a Claude Code plugin that bundles the connector (`.mcp.json`) and five `command` hooks. The hooks make **no network calls**. They work out local facts and hand them to Claude, which reads and writes through the connector.

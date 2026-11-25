@@ -24,6 +24,8 @@ session-link links a small team's Claude Code sessions through one shared ledger
 
 **People** sign in with GitHub at `/feed` to see who is active and the last 48 hours of updates.
 
+**Your notes.** `/me` (the **Your notes** button in the header) lists everything that concerns you, open items first: notes to yourself, handoffs to you and from you with whether they were picked up, your knowledge notes, and your posts from the last 7 days. In a session, ask "show my handoffs" or "did Sam pick up my handoff?" and Claude calls `my_notes` for the same lists.
+
 ## Using it day to day
 
 - **Let it read.** At the start of a session in a team repo, Claude checks the feed on its own and tells you if anyone is on the same files. You can also ask at any time: "is anyone working on `src/auth`?" (Claude calls `who_is_touching`), or "what's the team doing?" (`read_feed`).
@@ -35,7 +37,7 @@ session-link links a small team's Claude Code sessions through one shared ledger
 - **Turn on presence if you'd rather not think about sharing.** `/plugin` → session-link → settings → **Share presence**. It shares repo, branch and file paths only.
 - **Skip the per-post prompts.** In the same settings, **Auto-post status updates** posts your commit updates without asking, and **Automatic notes to self** saves where you left off and loads it at your next session without asking.
 - **Save the why when something lands.** When Claude offers "Save how this works for the team?" after a merge, say yes for anything someone might build on later.
-- **Glance without Claude.** `https://<your instance>/feed` shows who's active and the last 48 hours.
+- **Glance without Claude.** `https://<your instance>/feed` shows who's active and the last 48 hours. `/me` shows everything of yours, including handoffs you sent and notes already picked up.
 
 ## Examples
 

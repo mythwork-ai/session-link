@@ -64,6 +64,14 @@ label.inline{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--
 .field{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--muted);flex:1 1 200px}
 .notice{margin:0;padding:12px 16px;border-radius:10px;background:var(--ok-bg);color:var(--ok-fg);border:1px solid var(--ok-line);font-weight:500}
 .notice.bad{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line)}
+.list{list-style:none;margin:0;padding:0}.list li+li{border-top:1px solid var(--line)}
+a.row:hover{text-decoration:none;background:var(--bg)}
+.chip.open{background:var(--accent-soft);color:var(--accent-text)}.chip.done{background:var(--ok-bg);color:var(--ok-fg)}
+.done .title{color:var(--muted)}
+.btn.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
+.jump{display:flex;flex-wrap:wrap;gap:8px}
+.jump a{min-height:36px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:14px}
+.jump .n{font-weight:600;color:var(--accent-text)}
 .roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .roles>div{padding:12px 16px}
 details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:500}
@@ -94,6 +102,8 @@ export interface Shell {
   viewer?: Viewer;
   q?: string;
   narrow?: boolean;
+  /** Marks the header's "Your notes" button as the current page. */
+  onMe?: boolean;
   status?: number;
   headers?: Headers;
   /** Override the page's CSP (the OAuth consent page needs forms that redirect off-site). */
@@ -109,7 +119,7 @@ function topBar(s: Shell): string {
   const right = v
     ? `<form class="search" role="search" method="get" action="/feed"><label for="q" class="sr-only">Search team knowledge</label>
 <input id="q" name="q" value="${escapeHtml(s.q ?? "")}" placeholder="Search how things work and why"><button class="btn primary">Search</button></form>
-<div class="me">${v.manage ? '<a class="btn" href="/admin">Manage access</a>' : ""}
+<div class="me"><a class="btn${s.onMe ? " cur" : ""}" href="/me"${s.onMe ? ' aria-current="page"' : ""}>Your notes</a>${v.manage ? '<a class="btn" href="/admin">Manage access</a>' : ""}
 <span style="display:flex;align-items:center;gap:8px"><span class="avatar" aria-hidden="true">${initial(v.login)}</span><span class="small">${escapeHtml(v.login)}${v.role ? ` <span class="muted">· ${escapeHtml(v.role)}</span>` : ""}</span></span></div>`
     : "";
   return `<header class="top"><div class="in"><a class="brand" href="/feed">${ICON_LINK} session-link</a>${right}</div></header>`;
